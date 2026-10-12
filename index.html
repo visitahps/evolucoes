@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário.</p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 12/10 (3)</span></p>
 </div>
 
 <script>
@@ -707,7 +707,7 @@ const ERR={
   empty_completion:"Não veio resposta. Tente de novo.",
   invalid_json:"A resposta veio fora do formato esperado. Tente de novo."
 };
-const errMsg=e=>ERR[e&&e.code]||"Falha de conexão com a IA. Tente de novo.";
+const errMsg=e=>(ERR[e&&e.code]||"Falha de conexão com a IA. Tente de novo.")+(e&&e.detail?" (detalhe: "+e.detail+")":"");
 
 // ===================== backend: Supabase + IA =====================
 const LS_CFG="evo.cfg.v1";
@@ -734,8 +734,21 @@ function toMessages(input,imgs){
   if(imgs&&imgs.length){const last=out[out.length-1]; last.content=[...imgs.map(source=>({type:"image",source})),{type:"text",text:last.content}]}
   return out;
 }
+function errDetail(status,t){
+  let m=""; try{const j=JSON.parse(t); m=(j.error&&(j.error.message||j.error.type||j.error))||j.message||j.msg||""}catch(e){m=String(t||"")}
+  m=String(typeof m==="string"?m:JSON.stringify(m)).replace(/\s+/g," ").trim().slice(0,180);
+  return (status?"HTTP "+status:"")+(m?(status?" · ":"")+m:"");
+}
 async function callClaude(input,opts){
-  opts=opts||{};
+  opts=opts||{}; const tries=[0,4000,12000]; let last;
+  for(let i=0;i<tries.length;i++){
+    if(tries[i]){ if(opts.onRetry){try{opts.onRetry(i,tries.length-1)}catch(e){}} await new Promise((res,rej)=>{const t=setTimeout(res,tries[i]); if(opts.signal) opts.signal.addEventListener("abort",()=>{clearTimeout(t);rej({code:"cancelled"})},{once:true})}); }
+    try{ return await callClaudeOnce(input,opts) }
+    catch(e){ last=e; const retry=e&&(e.code==="rate_limited"||e.code==="upstream_error"||e.code==="empty_completion")&&!(e.text&&e.text.trim()); if(!retry) throw e; }
+  }
+  throw last;
+}
+async function callClaudeOnce(input,opts){
   if(!SB) throw {code:"session_expired"};
   const {data:{session}}=await SB.auth.getSession(); if(!session) throw {code:"session_expired"};
   const imgs=[]; if(opts.images){const arr=opts.images instanceof Blob?[opts.images]:[...opts.images]; for(const b of arr.slice(0,8)) imgs.push(await prepImage(b))}
@@ -744,11 +757,11 @@ async function callClaude(input,opts){
     resp=await fetch(cfg.SUPABASE_URL.replace(/\/+$/,"")+"/functions/v1/claude",{method:"POST",signal:opts.signal,
       headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":cfg.SUPABASE_ANON_KEY},
       body:JSON.stringify({messages:toMessages(input,imgs),tier:opts.modelTier||"default",max_tokens:opts.maxTokens||8000})});
-  }catch(e){ if(e&&e.name==="AbortError") throw {code:"cancelled",text}; throw {code:"upstream_error"} }
+  }catch(e){ if(e&&e.name==="AbortError") throw {code:"cancelled",text}; throw {code:"upstream_error",detail:"sem conexão com o Supabase"+(e&&e.message?" · "+e.message:"")} }
   if(!resp.ok){
     let t=""; try{t=await resp.text()}catch(e){}
     const code=resp.status===401?"session_expired":resp.status===403?"not_granted":resp.status===404?"no_function":(resp.status===429||resp.status===529)?"rate_limited":/missing_api_key/.test(t)?"no_key":/credit|billing/i.test(t)?"no_credit":/too long|too large/i.test(t)?"prompt_too_large":"upstream_error";
-    throw {code,message:t};
+    throw {code,message:t,detail:errDetail(resp.status,t)};
   }
   const rd=resp.body.getReader(), dec=new TextDecoder(); let buf="";
   try{
@@ -761,11 +774,11 @@ async function callClaude(input,opts){
         let d; try{d=JSON.parse(line.slice(5).trim())}catch(e){continue}
         if(d.type==="content_block_delta"&&d.delta&&d.delta.type==="text_delta"){text+=d.delta.text; if(opts.onText){try{opts.onText({text,delta:d.delta.text})}catch(e){}}}
         else if(d.type==="message_delta"&&d.delta&&d.delta.stop_reason==="max_tokens") truncated=true;
-        else if(d.type==="error") throw {code:d.error&&d.error.type==="overloaded_error"?"rate_limited":"upstream_error",text};
+        else if(d.type==="error") throw {code:d.error&&d.error.type==="overloaded_error"?"rate_limited":"upstream_error",text,detail:"IA · "+((d.error&&(d.error.message||d.error.type))||"erro")};
       }
     }
-  }catch(e){ if(e&&e.name==="AbortError") throw {code:"cancelled",text}; if(e&&e.code) throw e; throw {code:"upstream_error",text} }
-  if(!text.trim()) throw {code:"empty_completion"};
+  }catch(e){ if(e&&e.name==="AbortError") throw {code:"cancelled",text}; if(e&&e.code) throw e; throw {code:"upstream_error",text,detail:"a conexão caiu no meio da resposta"} }
+  if(!text.trim()) throw {code:"empty_completion",detail:"a IA não devolveu texto"};
   return {text,truncated};
 }
 function parseJSONLoose(t){
@@ -1552,28 +1565,29 @@ async function runEvolution(pid,adjust){
     const raw=(ev.ssvvRaw||"").trim();
     if(!adjust&&raw&&raw!==ev.ssvvSrc){
       if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="Resumindo os sinais vitais";$("outTag").className="tag live";$("outTag").textContent="Controles"}
-      const r=await sample(ssvvPrompt(raw),{signal:ctl.signal,cache:false,modelTier:"quick"});
+      const r=await sample(ssvvPrompt(raw),{signal:ctl.signal,cache:false,modelTier:"quick",onRetry:(i,n)=>{if(onPage(pid))$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}});
       const line=r.text.trim(); save(pid,{evo:{ssvvLine:line,ssvvSrc:raw}});
       if(onPage(pid)){$("ssvvBox").hidden=false;$("ssvvText").textContent=line}
     } else if(!raw&&ev.ssvvLine&&!adjust){ save(pid,{evo:{ssvvLine:"",ssvvSrc:""}}); if(onPage(pid))$("ssvvBox").hidden=true; }
     p=P.get(pid);
     // apoio clínico começa junto com a evolução (usa os dados brutos de hoje)
     let apoioP=null;
-    if(!adjust&&P.get(pid).apoioAuto!==false){ apoioP=runApoioParallel(pid,sample); apoioP.catch(()=>{}); }
     // 2) evolução
     let input;
     if(adjust&&lastTurns&&lastTurns.pid===pid){ input=[...lastTurns.turns,{role:"user",content:"Refaça o texto inteiro aplicando este ajuste e mantendo as mesmas regras"+(split?" (análise e sugestões depois da linha "+MARK+")":"")+": "+adjust}] }
     else if(adjust){ input=[{role:"user",content:buildEvoPrompt(p,(p.evo||{}).raw||"",(p.evo||{}).extra||"",split)},{role:"assistant",content:[(p.evo||{}).out,(p.evo||{}).alerts?MARK+"\n"+(p.evo||{}).alerts:""].filter(Boolean).join("\n\n")},{role:"user",content:"Refaça o texto inteiro aplicando este ajuste e mantendo as mesmas regras: "+adjust}] }
     else input=buildEvoPrompt(p,(p.evo||{}).raw||"",(p.evo||{}).extra||"",split);
     if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="Organizando";$("alertsBox").hidden=true;$("outTag").className="tag live";$("outTag").textContent="Escrevendo"}
-    const r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"default",onText:({text})=>renderOut(pid,text,split,false)});
+    const r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"quick",onText:({text})=>renderOut(pid,text,split,false),
+      onRetry:(i,n)=>{if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}}});
     const so=splitOut(r.text,split);
     save(pid,{evo:{out:so.evo,alerts:so.alerts,at:Date.now()}},0);
     lastTurns={pid,turns:[...(Array.isArray(input)?input:[{role:"user",content:input}]),{role:"assistant",content:r.text}]};
     renderOut(pid,r.text,split,true);
     if(onPage(pid))$("adjBox").hidden=false;
     if(r.truncated&&onPage(pid)){st.className="status err";st.textContent="A resposta foi cortada no limite de tamanho. Revise o final."}
-    // 3) impressão (rápida) e apoio clínico, que já estava rodando
+    if(!adjust&&P.get(pid).apoioAuto!==false){ apoioP=runApoioParallel(pid,sample); apoioP.catch(()=>{}); }
+    // 3) impressão (rápida) e apoio clínico, em paralelo
     if(onPage(pid)&&!st.textContent){st.className="status thinking";st.textContent="Evolução pronta. Gerando impressão"+(apoioP?" e apoio clínico":"")}
     await runImp(pid,sample);
     if(apoioP){
@@ -1584,7 +1598,7 @@ async function runEvolution(pid,adjust){
   }catch(e){
     if(onPage(pid)){ $("evoOut").classList.remove("thinking"); if(e&&e.text)renderOut(pid,e.text,true,false); else if(!(P.get(pid).evo||{}).out){$("evoOut").textContent=""}
       $("outTag").className="tag";$("outTag").textContent=e&&e.code==="cancelled"?"Interrompida":"Incompleta";
-      if(e&&e.code!=="cancelled"){st.className="status err";st.textContent=errMsg(e)} }
+      if(e&&e.code!=="cancelled"){st.className="status err";st.textContent=errMsg(e)+" Os dados de hoje continuam salvos; toque em Reorganizar evolução para tentar de novo."} }
   }finally{ setBusy(false); refreshHead(pid); }
 }
 async function runApoioParallel(pid,sample){
