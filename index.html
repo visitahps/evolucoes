@@ -763,6 +763,9 @@ function manualAsk(prompt,opts){
     const close=()=>{wrap.remove();document.body.classList.remove("mdl-on");dlgOpen=null};
     const cancel=keep=>{close(); if(opts.resumeKey&&!keep) clearPending(); reject({code:"cancelled"})};
     const st=h("div",{class:"status"});
+    const sig=prompt.trim().slice(0,160);
+    const isPrompt=t=>{t=String(t||"").trim(); return t===prompt.trim()||(sig.length>40&&t.includes(sig))||/#{8,} PARTE ===/.test(t)};
+    const PROMPT_MSG="Isso é o pedido, não a resposta. No Claude, espere ele terminar, toque no botão de copiar embaixo da resposta dele e volte aqui.";
     const pre=h("pre",{class:"mdl-pre",text:prompt});
     const det=h("details",{},h("summary",{class:"small muted",text:"Ver o pedido ("+Math.max(1,Math.round(prompt.length/1000))+" mil caracteres)"}),pre);
     const copyBtn=h("button",{type:"button",class:"btn big"},"1 · Copiar pedido");
@@ -771,9 +774,9 @@ function manualAsk(prompt,opts){
     const openBtn=h("a",{class:"btn quiet big",href:CLAUDE_URL,target:"_blank",rel:"noopener"},"2 · Abrir o Claude");
     const ans=h("textarea",{class:"in",id:"mdlAns",rows:"7",placeholder:"3 · Cole aqui a resposta inteira do Claude"});
     const pasteBtn=h("button",{type:"button",class:"btn quiet"},"Colar resposta");
-    pasteBtn.onclick=async()=>{try{const t=await navigator.clipboard.readText(); if(t){ans.value=t;st.textContent=""} else throw 0}catch(e){st.className="status";st.textContent="Toque e segure no campo e escolha Colar."; ans.focus()}};
+    pasteBtn.onclick=async()=>{try{const t=await navigator.clipboard.readText(); if(t&&isPrompt(t)){st.className="status err";st.textContent=PROMPT_MSG;return} if(t){ans.value=t;st.textContent=""} else throw 0}catch(e){st.className="status";st.textContent="Toque e segure no campo e escolha Colar."; ans.focus()}};
     const useBtn=h("button",{type:"button",class:"btn big",id:"mdlUse"},"4 · Usar resposta");
-    useBtn.onclick=()=>{const t=ans.value.trim(); if(!t){st.className="status err";st.textContent="Cole a resposta do Claude no campo acima.";return} close(); if(opts.resumeKey) clearPending(); resolve({text:t,truncated:false})};
+    useBtn.onclick=()=>{const t=ans.value.trim(); if(!t){st.className="status err";st.textContent="Cole a resposta do Claude no campo acima.";return} if(isPrompt(t)){st.className="status err";st.textContent=PROMPT_MSG;ans.value="";return} close(); if(opts.resumeKey) clearPending(); resolve({text:t,truncated:false})};
     box.append(...[
       h("div",{class:"row"},h("h2",{id:"mdlT",text:opts.title||"Pedido ao Claude"}),h("span",{class:"spacer"}),h("button",{type:"button",class:"btn quiet sm",onclick:()=>cancel(false)},"Cancelar")),
       opts.attach&&opts.attach.length?h("div",{class:"banner",text:"No Claude, anexe também: "+opts.attach.join(", ")+"."}):null,
@@ -1619,7 +1622,7 @@ function applyEvoResponse(pid,text,meta){
   const parts=parseParts(text);
   let evo=parts.EVOLUCAO, alerts=parts.ALERTAS||"";
   if(!evo){
-    if(Object.keys(parts).length) throw {code:"bad_parts"};
+    if(Object.keys(parts).length||/={3}[A-Z]/.test(text)) throw {code:"bad_parts"};
     const so=splitOut(text,meta.split); evo=so.evo; alerts=so.alerts;
   }
   const patch={evo:{out:evo,alerts,at:Date.now()}};
