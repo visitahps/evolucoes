@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 12/10 (4)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 12/10 (6)</span></p>
 </div>
 
 <script>
@@ -717,7 +717,16 @@ function getCfg(){
   try{const c=JSON.parse(localStorage.getItem(LS_CFG)||"null");if(c&&c.SUPABASE_URL&&c.SUPABASE_ANON_KEY)return c}catch(e){}
   return null;
 }
-let SB=null, UID=null, persist=false, gate="loading";
+let SB=null, UID=null, persist=false, gate="loading", CUR_SESSION=null;
+const DIAG=[];
+function diagPush(o){ DIAG.push(o); while(DIAG.length>8) DIAG.shift() }
+async function getSessionSafe(){
+  const s=await Promise.race([SB.auth.getSession().then(r=>r&&r.data&&r.data.session).catch(()=>null),new Promise(r=>setTimeout(()=>r("slow"),6000))]);
+  if(s&&s!=="slow"){ CUR_SESSION=s; return s }
+  if(CUR_SESSION&&(!CUR_SESSION.expires_at||CUR_SESSION.expires_at*1000>Date.now()+30000)) return CUR_SESSION;
+  if(s==="slow") throw {code:"upstream_error",detail:"o login deste aparelho travou; saia e entre de novo"};
+  return null;
+}
 let sampleP=Promise.resolve(null);
 function blobToB64(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(",")[1]);r.onerror=rej;r.readAsDataURL(blob)})}
 async function prepImage(blob){
@@ -745,7 +754,7 @@ async function callClaude(input,opts){
   for(let i=0;i<tries.length;i++){
     if(tries[i]){ if(opts.onRetry){try{opts.onRetry(i,tries.length-1)}catch(e){}} await new Promise((res,rej)=>{const t=setTimeout(res,tries[i]); if(opts.signal) opts.signal.addEventListener("abort",()=>{clearTimeout(t);rej({code:"cancelled"})},{once:true})}); }
     try{ return await callClaudeOnce(input,opts) }
-    catch(e){ last=e; const retry=e&&(e.code==="rate_limited"||e.code==="upstream_error"||e.code==="empty_completion"||e.code==="timeout")&&!(e.text&&e.text.trim()); if(!retry) throw e; }
+    catch(e){ last=e; const retry=e&&(e.code==="rate_limited"||e.code==="upstream_error"||e.code==="empty_completion"||(e.code==="timeout"&&i<1))&&!(e.text&&e.text.trim()); if(!retry) throw e; }
   }
   throw last;
 }
@@ -753,21 +762,29 @@ async function callClaudeOnce(input,opts){
   const own=new AbortController(); let why=null;
   const kill=(w)=>{why=w; own.abort()};
   if(opts.signal){ if(opts.signal.aborted) own.abort(); else opts.signal.addEventListener("abort",()=>own.abort(),{once:true}) }
-  let wd=setTimeout(()=>kill("a IA não começou a responder em 60 s"),60000);
-  const poke=()=>{clearTimeout(wd); wd=setTimeout(()=>kill("a IA parou de responder por 60 s"),60000)};
-  try{ return await callClaudeRaw(input,{...opts,signal:own.signal,_poke:poke}) }
+  let cur="login";
+  const WHY={login:"o login deste aparelho não respondeu",servidor:"o servidor (Supabase) não respondeu",ia:"o servidor conectou, mas a IA não mandou nada",escrevendo:"a IA parou de escrever no meio"};
+  const WAIT1=120000, WAIT2=90000;
+  let wd=setTimeout(()=>kill((WHY[cur]||"sem resposta")+" em "+WAIT1/1000+" s"),WAIT1);
+  const poke=()=>{clearTimeout(wd); wd=setTimeout(()=>kill((WHY[cur]||"sem resposta")+" por "+WAIT2/1000+" s"),WAIT2)};
+  try{ return await callClaudeRaw(input,{...opts,signal:own.signal,_poke:poke,_stage:k=>{cur=k}}) }
   catch(e){ if(why&&e&&e.code==="cancelled") throw {code:"timeout",text:e.text,detail:why}; throw e }
   finally{ clearTimeout(wd) }
 }
 async function callClaudeRaw(input,opts){
   if(!SB) throw {code:"session_expired"};
-  const {data:{session}}=await SB.auth.getSession(); if(!session) throw {code:"session_expired"};
+  const stage=opts._stage||(()=>{}); const D={at:Date.now(),tier:opts.modelTier||"default",chars:0,etapa:"login"}; diagPush(D);
+  const mark=(k)=>{D.etapa=k; D[k]=((Date.now()-D.at)/1000).toFixed(1); stage(k)};
+  stage("login");
+  const session=await getSessionSafe(); if(!session) throw {code:"session_expired"};
+  mark("servidor");
   const imgs=[]; if(opts.images){const arr=opts.images instanceof Blob?[opts.images]:[...opts.images]; for(const b of arr.slice(0,8)) imgs.push(await prepImage(b))}
   const cfg=getCfg(); let text="", truncated=false, resp;
   try{
     resp=await fetch(cfg.SUPABASE_URL.replace(/\/+$/,"")+"/functions/v1/claude",{method:"POST",signal:opts.signal,
       headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":cfg.SUPABASE_ANON_KEY},
-      body:JSON.stringify({messages:toMessages(input,imgs),tier:opts.modelTier||"default",max_tokens:opts.maxTokens||8000})});
+      body:(()=>{const b=JSON.stringify({messages:toMessages(input,imgs),tier:opts.modelTier||"default",max_tokens:opts.maxTokens||16000}); D.chars=b.length; return b})()});
+    D.status=resp.status; mark("ia");
   }catch(e){ if(e&&e.name==="AbortError") throw {code:"cancelled",text}; throw {code:"upstream_error",detail:"sem conexão com o Supabase"+(e&&e.message?" · "+e.message:"")} }
   if(!resp.ok){
     let t=""; try{t=await resp.text()}catch(e){}
@@ -784,13 +801,16 @@ async function callClaudeRaw(input,opts){
         const ev=buf.slice(0,i); buf=buf.slice(i+2);
         const line=ev.split("\n").find(l=>l.startsWith("data:")); if(!line) continue;
         let d; try{d=JSON.parse(line.slice(5).trim())}catch(e){continue}
-        if(d.type==="content_block_delta"&&d.delta&&d.delta.type==="text_delta"){text+=d.delta.text; if(opts.onText){try{opts.onText({text,delta:d.delta.text})}catch(e){}}}
+        if(d.type==="message_start"&&D.inicio===undefined){D.inicio=((Date.now()-D.at)/1000).toFixed(1)}
+        if(d.type==="content_block_delta"&&d.delta&&d.delta.type==="thinking_delta"&&D.pensando===undefined){D.pensando=((Date.now()-D.at)/1000).toFixed(1)}
+        if(d.type==="content_block_delta"&&d.delta&&d.delta.type==="text_delta"){if(D.escrevendo===undefined)mark("escrevendo"); text+=d.delta.text; if(opts.onText){try{opts.onText({text,delta:d.delta.text})}catch(e){}}}
         else if(d.type==="message_delta"&&d.delta&&d.delta.stop_reason==="max_tokens") truncated=true;
         else if(d.type==="message_delta"&&d.delta&&d.delta.stop_reason==="refusal"&&!text.trim()) throw {code:"refused",detail:"a IA recusou processar este texto"};
         else if(d.type==="error") throw {code:d.error&&d.error.type==="overloaded_error"?"rate_limited":"upstream_error",text,detail:"IA · "+((d.error&&(d.error.message||d.error.type))||"erro")};
       }
     }
   }catch(e){ if(e&&e.name==="AbortError") throw {code:"cancelled",text}; if(e&&e.code) throw e; throw {code:"upstream_error",text,detail:"a conexão caiu no meio da resposta"} }
+  D.fim=((Date.now()-D.at)/1000).toFixed(1); D.ok=!!text.trim(); D.cortada=truncated;
   if(opts.signal&&opts.signal.aborted) throw {code:"cancelled",text};
   if(!text.trim()) throw {code:"empty_completion",detail:"a IA não devolveu texto"};
   return {text,truncated};
@@ -1592,8 +1612,9 @@ async function runEvolution(pid,adjust){
     else if(adjust){ input=[{role:"user",content:buildEvoPrompt(p,(p.evo||{}).raw||"",(p.evo||{}).extra||"",split)},{role:"assistant",content:[(p.evo||{}).out,(p.evo||{}).alerts?MARK+"\n"+(p.evo||{}).alerts:""].filter(Boolean).join("\n\n")},{role:"user",content:"Refaça o texto inteiro aplicando este ajuste e mantendo as mesmas regras: "+adjust}] }
     else input=buildEvoPrompt(p,(p.evo||{}).raw||"",(p.evo||{}).extra||"",split);
     if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="Organizando";$("alertsBox").hidden=true;$("outTag").className="tag live";$("outTag").textContent="Escrevendo"}
-    const r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"quick",onText:({text})=>renderOut(pid,text,split,false),
-      onRetry:(i,n)=>{if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}}});
+    const T0=Date.now(); let gotText=false; const tick=setInterval(()=>{ if(gotText||!onPage(pid)) return; const o=$("evoOut"); if(o&&/^(Organizando|A IA não respondeu)/.test(o.textContent)) o.textContent=o.textContent.replace(/ · \d+ s$/,"")+" · "+Math.round((Date.now()-T0)/1000)+" s" },1000);
+    let r; try{ r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"quick",onText:({text})=>{gotText=true;renderOut(pid,text,split,false)},
+      onRetry:(i,n)=>{if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}}}); } finally { clearInterval(tick) }
     const so=splitOut(r.text,split);
     save(pid,{evo:{out:so.evo,alerts:so.alerts,at:Date.now()}},0);
     lastTurns={pid,turns:[...(Array.isArray(input)?input:[{role:"user",content:input}]),{role:"assistant",content:r.text}]};
@@ -1614,9 +1635,26 @@ async function runEvolution(pid,adjust){
       $("outTag").className="tag";$("outTag").textContent=e&&e.code==="cancelled"?"Interrompida":"Incompleta";
       if(e&&e.code!=="cancelled"&&!(e.text&&e.text.trim())){ const o=$("evoOut"); o.className="outtext"; o.textContent="";
         o.append(h("div",{class:"status err",style:"white-space:normal",text:"Não consegui gerar a evolução. "+errMsg(e)}),
-          h("button",{type:"button",class:"btn",style:"margin-top:10px",onclick:()=>runEvolution(pid)},"Tentar de novo")); }
+          h("div",{class:"row",style:"margin-top:10px;gap:8px;flex-wrap:wrap"},h("button",{type:"button",class:"btn",onclick:()=>runEvolution(pid)},"Tentar de novo"),h("button",{type:"button",class:"btn quiet",onclick:ev=>runConnTest(ev.currentTarget.closest("pre")||o)},"Testar conexão")),
+          diagBox()); }
       if(e&&e.code!=="cancelled"){st.className="status err";st.textContent=errMsg(e)+" Os dados de hoje continuam salvos; toque em Reorganizar evolução para tentar de novo."} }
   }finally{ setBusy(false); refreshHead(pid); }
+}
+function diagLine(d){
+  const hhmm=new Date(d.at).toTimeString().slice(0,8);
+  return hhmm+" · "+({quick:"rápido",default:"detalhado",complex:"aprofundado"}[d.tier]||d.tier)+" · pedido "+Math.round(d.chars/1000)+" mil caracteres"
+    +(d.status?" · HTTP "+d.status:"")+(d.ia?" · servidor "+d.ia+" s":"")+(d.inicio?" · IA iniciou "+d.inicio+" s":"")+(d.pensando?" · pensando "+d.pensando+" s":"")+(d.escrevendo?" · escreveu "+d.escrevendo+" s":"")
+    +(d.fim?" · fim "+d.fim+" s":"")+(d.cortada?" · CORTADA":"")+(d.ok?" · ok":" · parou em: "+d.etapa);
+}
+function diagBox(){
+  return h("details",{class:"small muted",style:"margin-top:10px;white-space:pre-wrap"},h("summary",{text:"Detalhes técnicos (mande um print disto se pedir ajuda)"}),h("div",{text:DIAG.map(diagLine).join("\n")||"sem registros"}));
+}
+async function runConnTest(box){
+  const sample=await sampleP; if(!sample) return;
+  const res=h("div",{class:"status",style:"white-space:pre-wrap;margin-top:10px",text:"Testando a conexão com a IA (rápido e detalhado)…"}); box.append(res);
+  const one=async(tier,label)=>{ const t0=Date.now(); try{ const r=await sample("Responda apenas: OK",{modelTier:tier,maxTokens:2000,cache:false}); return label+": OK em "+((Date.now()-t0)/1000).toFixed(1)+" s ("+r.text.trim().slice(0,20)+")" }catch(e){ return label+": FALHOU em "+((Date.now()-t0)/1000).toFixed(1)+" s · "+errMsg(e) } };
+  const a=await one("quick","Rápido (Haiku)"); res.textContent=a+"\nTestando detalhado…";
+  const b=await one("default","Detalhado (Sonnet)"); res.textContent=a+"\n"+b; box.append(diagBox());
 }
 async function runApoioParallel(pid,sample){
   const p=clone(P.get(pid)); p.evo={...(p.evo||{}),out:"",alerts:""};
@@ -2357,7 +2395,8 @@ $("logoutBtn").onclick=async()=>{ for(const pid of [...pending.keys()]){ clearTi
   const cfg=getCfg();
   if(!cfg){ gate="setup"; render(); return }
   if(!window.supabase||!window.supabase.createClient){ gate="login"; showBanner("Não consegui carregar o Supabase. Confira a internet e recarregue a página."); render(); return }
-  SB=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+  SB=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,lock:async(n,t,fn)=>await fn()}});
+  try{ SB.auth.onAuthStateChange((ev,s)=>{ CUR_SESSION=s||null }) }catch(e){}
   let session=null;
   try{ ({data:{session}}=await SB.auth.getSession()) }catch(e){}
   if(!session){ gate="login"; render(); return }
