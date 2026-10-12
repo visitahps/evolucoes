@@ -199,16 +199,6 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
 .gate{max-width:440px;margin:6vh auto 0;display:flex;flex-direction:column;gap:14px}
 .gate h2{font-family:var(--display);font-weight:600;font-size:1.4rem;margin:0}
 .gate .card-b{gap:12px}
-.mdl{position:fixed;inset:0;z-index:50;background:rgba(8,16,22,.55);display:flex;align-items:flex-end;justify-content:center;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
-@media (min-width:700px){.mdl{align-items:center}}
-.mdl-box{background:var(--surface);color:var(--ink);border-radius:14px;max-width:640px;width:100%;max-height:100%;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 12px 40px rgba(0,0,0,.3)}
-.mdl-box h2{font-family:var(--display);font-weight:600;font-size:1.2rem;margin:0;overflow-wrap:anywhere;min-width:0}
-.mdl-steps{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-@media (max-width:440px){.mdl-steps{grid-template-columns:1fr}}
-.mdl-pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.78rem;max-height:30vh;overflow:auto;background:var(--sunk);padding:10px;border-radius:8px;margin:6px 0 0}
-body.mdl-on{overflow:hidden}
-a.btn{text-decoration:none;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box}
-#resume{gap:10px;align-items:center}
 </style>
 </head>
 <body>
@@ -225,9 +215,8 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center;justify-conten
     </div>
   </div>
   <div id="banner" class="banner" hidden></div>
-  <div id="resume" class="banner row" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. A IA é o Claude da sua assinatura: o site prepara o pedido, você cola no Claude e traz a resposta. Revise sempre antes de colar no prontuário.</p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário.</p>
 </div>
 
 <script>
@@ -705,11 +694,14 @@ function armed(btn,label,fn){
     btn.dataset.armed="1";btn.textContent=label;t=setTimeout(()=>{delete btn.dataset.armed;btn.textContent=orig},4000)};
 }
 const ERR={
-  not_granted:"Pedido cancelado.",
+  not_granted:"Este e-mail não está liberado para usar a IA. Confira o segredo ALLOWED_EMAILS no Supabase.",
   sampling_disabled:"O Claude não está disponível para esta conta.",
   rate_limited:"Muitos pedidos seguidos ou limite de uso atingido. Tente de novo em alguns minutos.",
   session_expired:"Sua sessão expirou. Saia e entre de novo.",
-  bad_parts:"Não encontrei a evolução na resposta. Copie a resposta inteira do Claude, do começo ao fim, e cole de novo.",
+  no_function:"A função de IA não foi encontrada no Supabase. Confira o nome da função: claude.",
+  no_key:"Falta a chave da Anthropic no Supabase (segredo ANTHROPIC_API_KEY).",
+  no_credit:"A conta da Anthropic está sem créditos. Adicione créditos no console da Anthropic.",
+  image_rejected:"Não consegui preparar a imagem. Tente outro arquivo.",
   prompt_too_large:"O texto é grande demais. Divida em partes.",
   refused:"O Claude não processou este texto. Revise o conteúdo e tente de novo.",
   empty_completion:"Não veio resposta. Tente de novo.",
@@ -717,9 +709,8 @@ const ERR={
 };
 const errMsg=e=>ERR[e&&e.code]||"Falha de conexão com a IA. Tente de novo.";
 
-// ===================== backend: Supabase (dados) + Claude por copiar e colar (IA) =====================
-const LS_CFG="evo.cfg.v1", LS_PEND="evo.pending.v1";
-const CLAUDE_URL="https://claude.ai/new";
+// ===================== backend: Supabase + IA =====================
+const LS_CFG="evo.cfg.v1";
 function getCfg(){
   if(CONFIG.SUPABASE_URL&&CONFIG.SUPABASE_ANON_KEY) return {...CONFIG,fixed:true};
   try{const c=JSON.parse(localStorage.getItem(LS_CFG)||"null");if(c&&c.SUPABASE_URL&&c.SUPABASE_ANON_KEY)return c}catch(e){}
@@ -727,75 +718,72 @@ function getCfg(){
 }
 let SB=null, UID=null, persist=false, gate="loading";
 let sampleP=Promise.resolve(null);
+function blobToB64(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(",")[1]);r.onerror=rej;r.readAsDataURL(blob)})}
+async function prepImage(blob){
+  try{
+    const bmp=await createImageBitmap(blob); const sc=Math.min(1,1600/Math.max(bmp.width,bmp.height));
+    const cv=document.createElement("canvas"); cv.width=Math.round(bmp.width*sc); cv.height=Math.round(bmp.height*sc);
+    const cx=cv.getContext("2d"); cx.fillStyle="#fff"; cx.fillRect(0,0,cv.width,cv.height); cx.drawImage(bmp,0,0,cv.width,cv.height);
+    const out=await new Promise(r=>cv.toBlob(r,"image/jpeg",0.85));
+    return {type:"base64",media_type:"image/jpeg",data:await blobToB64(out)};
+  }catch(e){ throw {code:"image_rejected"} }
+}
+function toMessages(input,imgs){
+  const src=typeof input==="string"?[{role:"user",content:input}]:input;
+  const out=[]; src.forEach(m=>{const l=out[out.length-1]; if(l&&l.role===m.role) l.content+="\n\n"+m.content; else out.push({role:m.role,content:String(m.content)})});
+  if(imgs&&imgs.length){const last=out[out.length-1]; last.content=[...imgs.map(source=>({type:"image",source})),{type:"text",text:last.content}]}
+  return out;
+}
+async function callClaude(input,opts){
+  opts=opts||{};
+  if(!SB) throw {code:"session_expired"};
+  const {data:{session}}=await SB.auth.getSession(); if(!session) throw {code:"session_expired"};
+  const imgs=[]; if(opts.images){const arr=opts.images instanceof Blob?[opts.images]:[...opts.images]; for(const b of arr.slice(0,8)) imgs.push(await prepImage(b))}
+  const cfg=getCfg(); let text="", truncated=false, resp;
+  try{
+    resp=await fetch(cfg.SUPABASE_URL.replace(/\/+$/,"")+"/functions/v1/claude",{method:"POST",signal:opts.signal,
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":cfg.SUPABASE_ANON_KEY},
+      body:JSON.stringify({messages:toMessages(input,imgs),tier:opts.modelTier||"default",max_tokens:opts.maxTokens||8000})});
+  }catch(e){ if(e&&e.name==="AbortError") throw {code:"cancelled",text}; throw {code:"upstream_error"} }
+  if(!resp.ok){
+    let t=""; try{t=await resp.text()}catch(e){}
+    const code=resp.status===401?"session_expired":resp.status===403?"not_granted":resp.status===404?"no_function":(resp.status===429||resp.status===529)?"rate_limited":/missing_api_key/.test(t)?"no_key":/credit|billing/i.test(t)?"no_credit":/too long|too large/i.test(t)?"prompt_too_large":"upstream_error";
+    throw {code,message:t};
+  }
+  const rd=resp.body.getReader(), dec=new TextDecoder(); let buf="";
+  try{
+    for(;;){
+      const {done,value}=await rd.read(); if(done) break;
+      buf+=dec.decode(value,{stream:true}).replace(/\r/g,"");
+      let i; while((i=buf.indexOf("\n\n"))>=0){
+        const ev=buf.slice(0,i); buf=buf.slice(i+2);
+        const line=ev.split("\n").find(l=>l.startsWith("data:")); if(!line) continue;
+        let d; try{d=JSON.parse(line.slice(5).trim())}catch(e){continue}
+        if(d.type==="content_block_delta"&&d.delta&&d.delta.type==="text_delta"){text+=d.delta.text; if(opts.onText){try{opts.onText({text,delta:d.delta.text})}catch(e){}}}
+        else if(d.type==="message_delta"&&d.delta&&d.delta.stop_reason==="max_tokens") truncated=true;
+        else if(d.type==="error") throw {code:d.error&&d.error.type==="overloaded_error"?"rate_limited":"upstream_error",text};
+      }
+    }
+  }catch(e){ if(e&&e.name==="AbortError") throw {code:"cancelled",text}; if(e&&e.code) throw e; throw {code:"upstream_error",text} }
+  if(!text.trim()) throw {code:"empty_completion"};
+  return {text,truncated};
+}
 function parseJSONLoose(t){
-  t=String(t||"");
   try{return JSON.parse(t)}catch(e){}
   const f=t.match(/```(?:json)?\s*([\s\S]*?)```/); if(f){try{return JSON.parse(f[1])}catch(e){}}
   const a=Math.min(...["{","["].map(c=>{const i=t.indexOf(c);return i<0?Infinity:i})), b=Math.max(t.lastIndexOf("}"),t.lastIndexOf("]"));
   if(a<b){try{return JSON.parse(t.slice(a,b+1))}catch(e){}}
   return undefined;
 }
-function flattenTurns(input){
-  if(typeof input==="string") return input;
-  if(input.length===1) return input[0].content;
-  return input.map((m,i)=>i===input.length-1?"NOVO PEDIDO DO MÉDICO:\n"+m.content:(m.role==="user"?"PEDIDO ANTERIOR DO MÉDICO:":"SUA RESPOSTA ANTERIOR:")+'\n"""\n'+m.content+'\n"""').join("\n\n");
-}
-function fallbackCopy(txt){
-  const ta=document.createElement("textarea"); ta.value=txt; ta.setAttribute("readonly",""); ta.style.position="fixed"; ta.style.top="0"; ta.style.opacity="0";
-  document.body.appendChild(ta); ta.select(); try{ta.setSelectionRange(0,txt.length)}catch(e){}
-  let ok=false; try{ok=document.execCommand("copy")}catch(e){} ta.remove(); return ok;
-}
-function copyPrompt(txt){
-  if(navigator.clipboard&&navigator.clipboard.writeText) return navigator.clipboard.writeText(txt).then(()=>true,()=>fallbackCopy(txt));
-  return Promise.resolve(fallbackCopy(txt));
-}
-function setPending(o){try{localStorage.setItem(LS_PEND,JSON.stringify(o))}catch(e){}}
-function getPending(){try{const o=JSON.parse(localStorage.getItem(LS_PEND)||"null");if(o&&Date.now()-o.at<12*3600e3)return o}catch(e){}return null}
-function clearPending(){try{localStorage.removeItem(LS_PEND)}catch(e){}}
-let dlgOpen=null;
-// Abre o passo a passo: copiar o pedido, colar no Claude, colar a resposta aqui.
-function manualAsk(prompt,opts){
-  opts=opts||{};
-  return new Promise((resolve,reject)=>{
-    if(dlgOpen) dlgOpen.cancel(true);
-    const wrap=h("div",{class:"mdl",role:"dialog","aria-modal":"true","aria-labelledby":"mdlT"});
-    const box=h("div",{class:"mdl-box"});
-    const close=()=>{wrap.remove();document.body.classList.remove("mdl-on");dlgOpen=null};
-    const cancel=keep=>{close(); if(opts.resumeKey&&!keep) clearPending(); reject({code:"cancelled"})};
-    const st=h("div",{class:"status"});
-    const sig=prompt.trim().slice(0,160);
-    const isPrompt=t=>{t=String(t||"").trim(); return t===prompt.trim()||(sig.length>40&&t.includes(sig))||/#{8,} PARTE ===/.test(t)};
-    const PROMPT_MSG="Isso é o pedido, não a resposta. No Claude, espere ele terminar, toque no botão de copiar embaixo da resposta dele e volte aqui.";
-    const pre=h("pre",{class:"mdl-pre",text:prompt});
-    const det=h("details",{},h("summary",{class:"small muted",text:"Ver o pedido ("+Math.max(1,Math.round(prompt.length/1000))+" mil caracteres)"}),pre);
-    const copyBtn=h("button",{type:"button",class:"btn big"},"1 · Copiar pedido");
-    const markCopied=()=>{copyBtn.textContent="1 · Pedido copiado ✓";copyBtn.classList.add("sec")};
-    copyBtn.onclick=async()=>{const ok=await copyPrompt(prompt); if(ok) markCopied(); else {st.className="status err";st.textContent="Não consegui copiar. Abra \"Ver o pedido\", selecione tudo e copie."; det.open=true}};
-    const openBtn=h("a",{class:"btn quiet big",href:CLAUDE_URL,target:"_blank",rel:"noopener"},"2 · Abrir o Claude");
-    const ans=h("textarea",{class:"in",id:"mdlAns",rows:"7",placeholder:"3 · Cole aqui a resposta inteira do Claude"});
-    const pasteBtn=h("button",{type:"button",class:"btn quiet"},"Colar resposta");
-    pasteBtn.onclick=async()=>{try{const t=await navigator.clipboard.readText(); if(t&&isPrompt(t)){st.className="status err";st.textContent=PROMPT_MSG;return} if(t){ans.value=t;st.textContent=""} else throw 0}catch(e){st.className="status";st.textContent="Toque e segure no campo e escolha Colar."; ans.focus()}};
-    const useBtn=h("button",{type:"button",class:"btn big",id:"mdlUse"},"4 · Usar resposta");
-    useBtn.onclick=()=>{const t=ans.value.trim(); if(!t){st.className="status err";st.textContent="Cole a resposta do Claude no campo acima.";return} if(isPrompt(t)){st.className="status err";st.textContent=PROMPT_MSG;ans.value="";return} close(); if(opts.resumeKey) clearPending(); resolve({text:t,truncated:false})};
-    box.append(...[
-      h("div",{class:"row"},h("h2",{id:"mdlT",text:opts.title||"Pedido ao Claude"}),h("span",{class:"spacer"}),h("button",{type:"button",class:"btn quiet sm",onclick:()=>cancel(false)},"Cancelar")),
-      opts.attach&&opts.attach.length?h("div",{class:"banner",text:"No Claude, anexe também: "+opts.attach.join(", ")+"."}):null,
-      h("div",{class:"small muted",text:"Cole o pedido numa conversa nova do Claude. Quando ele terminar, toque no botão de copiar da resposta e volte aqui."}),
-      h("div",{class:"mdl-steps"},copyBtn,openBtn),det,ans,h("div",{class:"row"},pasteBtn,h("span",{class:"spacer"}),useBtn),st].filter(Boolean));
-    wrap.append(box); document.body.append(wrap); document.body.classList.add("mdl-on");
-    if(opts.signal) opts.signal.addEventListener("abort",()=>cancel(false),{once:true});
-    dlgOpen={cancel};
-    if(opts.resumeKey) setPending({key:opts.resumeKey,title:opts.title,prompt,meta:opts.meta||{},attach:opts.attach||[],at:Date.now()});
-    if(opts.autoCopy!==false&&navigator.clipboard&&navigator.clipboard.writeText){ try{navigator.clipboard.writeText(prompt).then(markCopied,()=>{})}catch(e){} }
-  });
-}
-const sampleFn=(input,opts)=>manualAsk(flattenTurns(input),opts);
+const sampleFn=(input,opts)=>callClaude(input,opts);
 sampleFn.json=async(input,opts)=>{
-  const r=await manualAsk(flattenTurns(input)+"\n\nResponda somente com o JSON pedido, sem texto antes ou depois.",opts);
-  const v=parseJSONLoose(r.text); if(v===undefined) throw {code:"invalid_json",text:r.text};
+  const add="\n\nResponda somente com o JSON pedido, sem texto antes ou depois e sem bloco de código.";
+  const inp=typeof input==="string"?input+add:input.map((m,i)=>i===input.length-1?{...m,content:m.content+add}:m);
+  const r=await callClaude(inp,opts); const v=parseJSONLoose(r.text);
+  if(v===undefined||r.truncated) throw {code:"invalid_json",text:r.text};
   return v;
 };
-sampleFn.limits=async()=>({maxPromptBytes:1e7});
+sampleFn.limits=async()=>({maxPromptBytes:1e6,images:{maxCount:8,maxInputBytes:20e6,mediaTypes:["image/jpeg","image/png","image/webp","image/gif"]}});
 
 
 // ===================== modelos =====================
@@ -1356,7 +1344,7 @@ LAUDO:
 ${text}
 """`;
   try{
-    const r=await sample.json(prompt,{title:"Ler exames · "+[P.get(pid).leito,P.get(pid).nome].filter(Boolean).join(" · ")});
+    const r=await sample.json(prompt,{cache:false,modelTier:"quick"});
     const col=(r&&Array.isArray(r.coletas))?r.coletas:[];
     if(!col.length) throw {code:"empty_completion"};
     let labs=(P.get(pid).labs||[]).slice(); let added=0;
@@ -1491,7 +1479,7 @@ function evolucaoTab(pid){
   const extra=h("textarea",{class:"in",id:"evoExtra",rows:"2",placeholder:"Observação só para hoje (opcional)"});
   extra.value=ev.extra||""; extra.oninput=()=>save(pid,{evo:{extra:extra.value}},1200);
   const optSplit=h("input",{type:"checkbox",id:"optSplit",checked:ev.split!==false}); optSplit.onchange=()=>save(pid,{evo:{split:optSplit.checked}});
-  const tier=h("select",{class:"in",id:"optTier"},h("option",{value:"default"},"padrão"),h("option",{value:"complex"},"aprofundado (mais lento)"));
+  const tier=h("select",{class:"in",id:"optTier"},h("option",{value:"default"},"padrão (Sonnet)"),h("option",{value:"complex"},"aprofundado (Opus, mais caro)"));
   const efNow=efText(p), nLabs=(p.labs||[]).length, nMetas=(p.metas||[]).filter(m=>!m.done).length;
   const ctxLine=h("div",{class:"small muted",text:"Entra junto: "+[efNow?"exame físico marcado":"exame físico (não marcado)",nLabs?nLabs+" exame(s) do histórico":"sem exames no histórico",nMetas?nMetas+" meta(s)":"sem metas",blText(p)?"beira leito de hoje":"beira leito (não preenchido)",p.imp?"impressão anterior":null].filter(Boolean).join(" · ")});
   const go=h("button",{type:"button",class:"btn",id:"evoGo"},"Reorganizar evolução");
@@ -1501,7 +1489,7 @@ function evolucaoTab(pid){
     h("div",{class:"field"},h("label",{class:"label",for:"evoSsvv"},"Sinais vitais · colar da tela de monitorização"),ssvv),
     h("fieldset",{class:"field"},h("legend",{class:"label"},"Dispositivos ",h("span",{class:"opt",text:"opcional"})),devBox,devOther),
     extra,
-    h("div",{class:"row small muted"},h("label",{class:"row",style:"gap:6px"},optSplit,"Separar análise e sugestões (não vão na cópia)")),
+    h("div",{class:"row small muted"},h("label",{class:"row",style:"gap:6px"},optSplit,"Separar análise e sugestões (não vão na cópia)"),h("label",{class:"row",style:"gap:6px",for:"optTier"},"Raciocínio",tier)),
     ctxLine,h("div",{class:"row"},go,stop),st);
   L.append(lb);
   // ---- saída
@@ -1539,7 +1527,7 @@ function evolucaoTab(pid){
     ctl=new AbortController();setBusy(true);try{await runImp(pid,sample)}finally{setBusy(false)}};
   return g;
 }
-function setBusy(b){running=b;["evoGo","adjGo","impRedo"].forEach(i=>{const e=$(i);if(e)e.disabled=b})}
+function setBusy(b){running=b;["evoGo","adjGo","impRedo"].forEach(i=>{const e=$(i);if(e)e.disabled=b});const s=$("evoStop");if(s)s.hidden=!b}
 const onPage=pid=>openPid===pid&&tab==="evolucao"&&$("evoOut");
 function renderOut(pid,text,split,final){
   if(!onPage(pid)) return;
@@ -1550,164 +1538,63 @@ function renderOut(pid,text,split,final){
   if(final){$("outTag").className="tag done";$("outTag").textContent="Salva "+fmtStamp(Date.now())}
 }
 function splitOut(text,split){const i=split?text.indexOf(MARK):-1;return {evo:(i>=0?text.slice(0,i):text).replace(/\s+$/,""),alerts:i>=0?text.slice(i+MARK.length).trim():""}}
-// ===== evolução numa resposta só (controles + evolução + análise + impressão + apoio) =====
-const PART_RE=/^\s*#*\s*={2,}\s*(CONTROLES|EVOLU[CÇ][AÃ]O|ALERTAS|IMPRESS[AÃ]O|APOIO)\s*={2,}\s*(\(.*\))?\s*:?\s*$/i;
-function parseParts(text){
-  const out={}; let cur=null;
-  String(text).replace(/\r/g,"").split("\n").forEach(l=>{
-    if(/^\s*```\w*\s*$/.test(l)) return;
-    const m=l.replace(/\*\*/g,"").match(PART_RE);
-    if(m){cur=m[1].toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g,""); out[cur]=out[cur]||[]; return}
-    if(cur) out[cur].push(l);
-  });
-  for(const k in out) out[k]=out[k].join("\n").trim();
-  return out;
-}
-function combinedEvoPrompt(p,split){
-  const ev=p.evo||{}, raw=(ev.ssvvRaw||"").trim();
-  const t=tpl("evolucao"), anal=flagOf(t,"analise")&&split, doApoio=p.apoioAuto!==false;
-  const pc=clone(p); pc.evo=pc.evo||{}; if(raw) delete pc.evo.ssvvLine;
-  const marks=[raw?"===CONTROLES===":null,"===EVOLUCAO===",anal?"===ALERTAS===":null,"===IMPRESSAO===",doApoio?"===APOIO===":null].filter(Boolean);
-  const S=[];
-  S.push(`Você vai fazer, numa resposta só, ${marks.length} partes sobre o mesmo paciente internado, nesta ordem:
-${marks.map(m=>"- "+m).join("\n")}
-Comece cada parte com a sua linha de marcação, exatamente como escrita acima e sozinha na linha.${anal?" A parte ===ALERTAS=== só entra se houver análise a fazer.":""} Não escreva nada antes da primeira marcação nem comentários depois da última parte. Não use blocos de código.`);
-  if(raw) S.push(`################ PARTE ===CONTROLES===\n`+ssvvPrompt(raw).replace("Responda somente com a linha final, sem comentários e sem markdown.","Nesta parte, escreva somente a linha final, sem comentários."));
-  let evoP=buildEvoPrompt(pc,ev.raw||"",ev.extra||"",split).replace("Responda somente com o texto final","Nesta parte, escreva somente o texto final");
-  if(raw) evoP+="\n\nNa seção de controles (sinais vitais), use exatamente a linha que você escreveu na parte ===CONTROLES===.";
-  S.push(`################ PARTE ===EVOLUCAO===\n`+evoP);
-  const imp=impPrompt(pc,"(é a evolução que você escreveu na parte ===EVOLUCAO=== desta resposta)",(p.imp||{}).extra||"")
-    .replace("Responda apenas com JSON, neste formato:","Nesta parte, escreva apenas um JSON, neste formato:");
-  S.push(`################ PARTE ===IMPRESSAO===\n`+imp);
-  if(doApoio){
-    const pa=clone(pc); pa.evo={...pa.evo,out:"",raw:"",alerts:""};
-    let ap=apoioPrompt(pa);
-    ap=ap.replace(patientContext(pa),"DADOS DO PACIENTE: os mesmos da parte ===EVOLUCAO=== acima.");
-    ap=ap.replace(/EVOLUÇÃO DE HOJE[\s\S]*$/,"EVOLUÇÃO DE HOJE: a que você escreveu na parte ===EVOLUCAO==="+(anal?", com a análise da parte ===ALERTAS===":"")+".");
-    ap=ap.replace("Responda apenas com JSON neste formato:","Nesta parte, escreva apenas um JSON neste formato:");
-    S.push(`################ PARTE ===APOIO===\n`+ap);
-  }
-  return S.join("\n\n");
-}
-function adjustPrompt(p,adj,split){
-  const ev=p.evo||{}, t=tpl("evolucao"), anal=flagOf(t,"analise")&&split;
-  return `Você recebe uma evolução médica já organizada e um pedido de ajuste do médico. Refaça a evolução inteira aplicando o ajuste e mantendo as instruções originais.
-
-INSTRUÇÕES ORIGINAIS DO MÉDICO:
-"""
-${t.text}
-"""
-
-${pageRules(t,split)}
-
-Comece a resposta com a linha ===EVOLUCAO===${anal?". Se houver análise, coloque-a depois de uma linha ===ALERTAS===":""}. Não use blocos de código.
-
-EVOLUÇÃO ATUAL:
-"""
-${ev.out||""}
-"""${ev.alerts?`
-
-ANÁLISE ATUAL:
-"""
-${ev.alerts}
-"""`:""}
-
-AJUSTE PEDIDO PELO MÉDICO:
-${adj}`;
-}
-function normApoio(r){
-  return (r&&Array.isArray(r.itens)?r.itens:[]).filter(x=>x&&x.titulo).slice(0,12).map(x=>({id:uid36(),tipo:TIPOS[x.tipo]?x.tipo:"lembrar",prioridade:SEV[x.prioridade]?x.prioridade:"media",titulo:String(x.titulo),detalhe:String(x.detalhe||""),acao:String(x.acao||""),fonte:String(x.fonte||""),pubmed:String(x.pubmed||""),done:false}));
-}
-function applyEvoResponse(pid,text,meta){
-  const parts=parseParts(text);
-  let evo=parts.EVOLUCAO, alerts=parts.ALERTAS||"";
-  if(!evo){
-    if(Object.keys(parts).length||/={3}[A-Z]/.test(text)) throw {code:"bad_parts"};
-    const so=splitOut(text,meta.split); evo=so.evo; alerts=so.alerts;
-  }
-  const patch={evo:{out:evo,alerts,at:Date.now()}};
-  if(meta.ssvvSrc&&parts.CONTROLES){patch.evo.ssvvLine=parts.CONTROLES.replace(/\s*\n\s*/g," ").trim();patch.evo.ssvvSrc=meta.ssvvSrc}
-  else if(meta.clearSsvv){patch.evo.ssvvLine="";patch.evo.ssvvSrc=""}
-  save(pid,patch,0);
-  const res={imp:false,apoio:null};
-  if(parts.IMPRESSAO){
-    const v=parseJSONLoose(parts.IMPRESSAO);
-    if(v&&v.impressao){
-      const tr=String(v.tendencia||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").trim(), txt=String(v.impressao).trim(), at=Date.now();
-      save(pid,{imp:{trend:tr,text:txt,at},impHist:(P.get(pid).impHist||[]).concat([{at,trend:tr,text:txt}]).slice(-30)},0);
-      res.imp=true;
-    }
-  }
-  if(parts.APOIO){
-    const v=parseJSONLoose(parts.APOIO);
-    if(v&&Array.isArray(v.itens)){ const itens=normApoio(v); save(pid,{apoio:{at:Date.now(),resumo:String(v.resumo||""),itens}},0); res.apoio=itens }
-  }
-  return res;
-}
-function finishEvo(pid,text,meta){
-  const res=applyEvoResponse(pid,text,meta);
-  if(onPage(pid)) rerenderTab(pid);
-  refreshTabs(pid); refreshHead(pid);
-  const st=$("evoSt");
-  if(st&&onPage(pid)){
-    const na=res.apoio?res.apoio.filter(x=>x.prioridade==="alta").length:0;
-    st.className="status";
-    st.textContent=meta.adjust?"Evolução ajustada e salva.":"Evolução salva"+(res.imp?", com impressão":"")+(res.apoio?". Apoio clínico: "+res.apoio.length+" ponto"+(res.apoio.length!==1?"s":"")+(na?", "+na+" de prioridade alta":""):"")+".";
-  }
-}
+let lastTurns=null;
 async function runEvolution(pid,adjust){
   if(running) return;
-  const st=$("evoSt"), p=P.get(pid), ev=p.evo||{}, split=ev.split!==false;
-  if(!persist){st.className="status err";st.textContent="Entre na sua conta para usar a IA.";return}
-  const meta={pid,split};
-  let prompt;
-  if(adjust){
-    if(!ev.out){st.className="status err";st.textContent="Gere a evolução primeiro.";return}
-    meta.adjust=true; prompt=adjustPrompt(p,adjust,split);
-  } else {
-    const raw=(ev.ssvvRaw||"").trim();
-    if(raw) meta.ssvvSrc=raw; else if(ev.ssvvLine) meta.clearSsvv=true;
-    prompt=combinedEvoPrompt(p,split);
-  }
-  setBusy(true); st.className="status"; st.textContent="Aguardando a resposta do Claude.";
+  const sample=await sampleP; const st=$("evoSt");
+  if(!sample){st.className="status err";st.textContent="Entre na sua conta para usar a IA.";return}
+  ctl=new AbortController(); setBusy(true); st.className="status"; st.textContent="";
   try{
-    const r=await manualAsk(prompt,{title:(adjust?"Ajustar evolução · ":"Evolução · ")+[p.leito,p.nome].filter(Boolean).join(" · "),resumeKey:"evo",meta});
-    finishEvo(pid,r.text,meta);
+    let p=P.get(pid); const ev=p.evo||{}; const split=ev.split!==false;
+    // 1) sinais vitais
+    const raw=(ev.ssvvRaw||"").trim();
+    if(!adjust&&raw&&raw!==ev.ssvvSrc){
+      if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="Resumindo os sinais vitais";$("outTag").className="tag live";$("outTag").textContent="Controles"}
+      const r=await sample(ssvvPrompt(raw),{signal:ctl.signal,cache:false,modelTier:"quick"});
+      const line=r.text.trim(); save(pid,{evo:{ssvvLine:line,ssvvSrc:raw}});
+      if(onPage(pid)){$("ssvvBox").hidden=false;$("ssvvText").textContent=line}
+    } else if(!raw&&ev.ssvvLine&&!adjust){ save(pid,{evo:{ssvvLine:"",ssvvSrc:""}}); if(onPage(pid))$("ssvvBox").hidden=true; }
+    p=P.get(pid);
+    // 2) evolução
+    let input;
+    if(adjust&&lastTurns&&lastTurns.pid===pid){ input=[...lastTurns.turns,{role:"user",content:"Refaça o texto inteiro aplicando este ajuste e mantendo as mesmas regras"+(split?" (análise e sugestões depois da linha "+MARK+")":"")+": "+adjust}] }
+    else if(adjust){ input=[{role:"user",content:buildEvoPrompt(p,(p.evo||{}).raw||"",(p.evo||{}).extra||"",split)},{role:"assistant",content:[(p.evo||{}).out,(p.evo||{}).alerts?MARK+"\n"+(p.evo||{}).alerts:""].filter(Boolean).join("\n\n")},{role:"user",content:"Refaça o texto inteiro aplicando este ajuste e mantendo as mesmas regras: "+adjust}] }
+    else input=buildEvoPrompt(p,(p.evo||{}).raw||"",(p.evo||{}).extra||"",split);
+    if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="Organizando";$("alertsBox").hidden=true;$("outTag").className="tag live";$("outTag").textContent="Escrevendo"}
+    const r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"default",onText:({text})=>renderOut(pid,text,split,false)});
+    const so=splitOut(r.text,split);
+    save(pid,{evo:{out:so.evo,alerts:so.alerts,at:Date.now()}},0);
+    lastTurns={pid,turns:[...(Array.isArray(input)?input:[{role:"user",content:input}]),{role:"assistant",content:r.text}]};
+    renderOut(pid,r.text,split,true);
+    if(onPage(pid))$("adjBox").hidden=false;
+    if(r.truncated&&onPage(pid)){st.className="status err";st.textContent="A resposta foi cortada no limite de tamanho. Revise o final."}
+    // 3) impressão
+    await runImp(pid,sample);
+    if(P.get(pid).apoioAuto!==false){
+      if(onPage(pid)){st.className="status thinking";st.textContent="Analisando o caso para o apoio clínico"}
+      try{ const it=await runApoio(pid,sample); const na=it.filter(x=>x.prioridade==="alta").length;
+        if(onPage(pid)){st.className="status";st.textContent="Evolução e impressão salvas. Apoio clínico: "+it.length+" ponto"+(it.length!==1?"s":"")+(na?", "+na+" de prioridade alta":"")+"."} refreshTabs(pid);
+      }catch(e){ if(e&&e.code==="cancelled") throw e; if(onPage(pid)){st.className="status err";st.textContent="Evolução salva. A análise do apoio clínico falhou; tente pela aba Apoio clínico."} }
+    } else if(onPage(pid)&&!st.textContent){st.className="status";st.textContent="Evolução e impressão salvas na ficha."}
   }catch(e){
-    const s2=$("evoSt"); if(s2&&onPage(pid)){ if(e&&e.code!=="cancelled"){s2.className="status err";s2.textContent=errMsg(e)} else s2.textContent="" }
-  }finally{ setBusy(false); }
-}
-function resumeEvo(pd){
-  if(running) return;
-  setBusy(true);
-  manualAsk(pd.prompt,{title:pd.title,resumeKey:"evo",meta:pd.meta,autoCopy:false})
-    .then(r=>finishEvo(pd.meta.pid,r.text,pd.meta))
-    .catch(e=>{const s2=$("evoSt"); if(s2&&e&&e.code!=="cancelled"){s2.className="status err";s2.textContent=errMsg(e)}})
-    .finally(()=>setBusy(false));
-}
-function checkResume(){
-  const el=$("resume"); if(!el) return;
-  const pd=getPending();
-  if(!pd||pd.key!=="evo"||!pd.meta||!P.has(pd.meta.pid)){el.hidden=true;return}
-  const p=P.get(pd.meta.pid);
-  el.textContent=""; el.hidden=false;
-  el.append(h("span",{text:"A evolução do leito "+(p.leito||"-")+" está esperando a resposta do Claude."}),
-    h("button",{type:"button",class:"btn sm",onclick:()=>{el.hidden=true;area="pac";openPid=pd.meta.pid;tab="evolucao";render();resumeEvo(pd)}},"Colar resposta"),
-    h("button",{type:"button",class:"linkbtn",onclick:()=>{clearPending();el.hidden=true}},"descartar"));
+    if(onPage(pid)){ $("evoOut").classList.remove("thinking"); if(e&&e.text)renderOut(pid,e.text,true,false); else if(!(P.get(pid).evo||{}).out){$("evoOut").textContent=""}
+      $("outTag").className="tag";$("outTag").textContent=e&&e.code==="cancelled"?"Interrompida":"Incompleta";
+      if(e&&e.code!=="cancelled"){st.className="status err";st.textContent=errMsg(e)} }
+  }finally{ setBusy(false); refreshHead(pid); }
 }
 async function runImp(pid,sample){
   const p=P.get(pid), evo=(p.evo||{}).out; if(!evo) return;
-  if(onPage(pid)){$("impText").className="outtext placeholder";$("impText").textContent="Aguardando a resposta do Claude."}
+  if(onPage(pid)){$("impText").className="outtext placeholder thinking";$("impText").textContent="Lendo o caso";$("impPill").textContent="";$("impPill").append(h("span",{class:"pill",text:"Analisando"}))}
   try{
-    const r=await sample.json(impPrompt(p,evo,(p.imp||{}).extra||""),{title:"Impressão · "+[p.leito,p.nome].filter(Boolean).join(" · ")});
-    const tr=String((r&&r.tendencia)||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").trim();
-    const txt=String((r&&r.impressao)||"").trim(); if(!txt) throw {code:"invalid_json"};
+    const r=await sample.json(impPrompt(p,evo,(p.imp||{}).extra||""),{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"default"});
+    const tr=String((r&&r.tendencia)||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+    const txt=String((r&&r.impressao)||"").trim(); if(!txt) throw {code:"empty_completion"};
     const at=Date.now(); const hist=(P.get(pid).impHist||[]).concat([{at,trend:tr,text:txt}]).slice(-30);
     save(pid,{imp:{trend:tr,text:txt,at},impHist:hist},0);
-    if(onPage(pid)) rerenderTab(pid);
+    if(onPage(pid)){$("impText").className="outtext";$("impText").textContent=txt;$("impPill").textContent="";$("impPill").append(trendPill(tr));$("impBox").className="impress "+((TREND[tr]||[])[1]||"")}
   }catch(e){
-    if(onPage(pid)){ const p2=P.get(pid).imp||{}; $("impText").className="outtext"+(p2.text?"":" placeholder"); $("impText").textContent=p2.text||"Ainda não gerada.";
-      if(e&&e.code!=="cancelled"){const s=$("evoSt");if(s){s.className="status err";s.textContent=errMsg(e)}} }
+    if(e&&e.code==="cancelled") throw e;
+    if(onPage(pid)){$("impText").className="outtext placeholder";$("impText").textContent="Não consegui gerar a impressão desta vez. Toque em \"Gerar impressão de novo\".";$("impPill").textContent=""}
   }
 }
 
@@ -1953,7 +1840,7 @@ function censusPanelEl(){
   const go=h("button",{type:"button",class:"btn",id:"censusGo"},"Ler censo");
   const st=h("div",{class:"status",id:"censusSt"});
   const prev=h("div",{id:"censusPrev",class:"stack"});
-  b.append(h("div",{class:"small muted",text:"Envie o censo como PDF (pode ser um por unidade), planilha, foto ou print. PDF com texto e planilha vão direto no pedido; foto e PDF escaneado você anexa no Claude. Você confere a lista antes de qualquer ficha ser criada."}),
+  b.append(h("div",{class:"small muted",text:"Envie o censo como PDF (pode ser um por unidade), planilha, foto ou print. Você confere a lista antes de qualquer ficha ser criada."}),
     fld("Arquivos do censo","censusFile",file),paste,h("div",{class:"row"},go),st,prev);
   card.append(b);
   go.onclick=()=>readCensus(file,paste,st,prev,go);
@@ -1969,22 +1856,23 @@ async function readCensus(file,paste,st,prev,go){
     const jobs=[]; if(txt) jobs.push({name:"texto colado",get:async()=>({text:txt})});
     files.forEach(f=>{
       const n=f.name.toLowerCase();
-      if(n.endsWith(".pdf")) jobs.push({name:f.name,get:()=>readPdf(f,0)});
+      if(n.endsWith(".pdf")) jobs.push({name:f.name,get:()=>readPdf(f,maxImgs)});
       else if(/\.(xlsx|xls|csv)$/.test(n)) jobs.push({name:f.name,get:()=>/\.csv$/.test(n)?f.text().then(t=>({text:t})):readSheet(f)});
-      else if(/^image\//.test(f.type)) jobs.push({name:f.name,get:async()=>({images:[]})});
+      else if(/^image\//.test(f.type)) jobs.push({name:f.name,get:async()=>({images:[f]})});
       else jobs.push({name:f.name,get:()=>f.text().then(t=>({text:t}))});
     });
-    const attachNames=[], textParts=[];
     for(let i=0;i<jobs.length;i++){
       const j=jobs[i]; st.className="status thinking"; st.textContent="Lendo "+j.name+(jobs.length>1?" ("+(i+1)+" de "+jobs.length+")":"");
       const c=await j.get();
-      if(c.images){ attachNames.push(j.name); continue }
-      textParts.push((jobs.length>1?"Arquivo "+j.name+":\n":"")+String(c.text||""));
+      let r;
+      if(c.images&&c.images.length){
+        if(!imgOk) throw {code:"images_unavailable"};
+        r=await sample.json(censusPrompt(j.name)+"\n\nO censo está nas imagens anexadas.",{images:c.images.slice(0,maxImgs),cache:false});
+      } else {
+        r=await sample.json(censusPrompt(j.name)+"\n\nCENSO:\n\"\"\"\n"+String(c.text||"").slice(0,120000)+"\n\"\"\"",{cache:false,modelTier:"quick"});
+      }
+      (r&&Array.isArray(r.pacientes)?r.pacientes:[]).forEach(x=>{ if(x&&x.nome) all.push(x) });
     }
-    st.className="status"; st.textContent="Aguardando a resposta do Claude.";
-    const addAll=r=>(r&&Array.isArray(r.pacientes)?r.pacientes:[]).forEach(x=>{ if(x&&x.nome) all.push(x) });
-    if(textParts.length) addAll(await sample.json(censusPrompt("")+"\n\nCENSO:\n\"\"\"\n"+textParts.join("\n\n").slice(0,250000)+"\n\"\"\"",{title:"Ler censo"}));
-    if(attachNames.length) addAll(await sample.json(censusPrompt("")+"\n\nO censo está nos arquivos que anexei nesta conversa.",{title:"Ler censo (arquivos anexados)",attach:attachNames}));
     if(!all.length){st.className="status err";st.textContent="Não encontrei pacientes nesse censo. Confira o arquivo ou cole o texto.";return}
     // remove duplicados (mesmo nome)
     const seen=new Map(); all.forEach(x=>{const k=normName(x.nome);if(!seen.has(k))seen.set(k,x)});
@@ -2176,10 +2064,10 @@ ${e.alerts}
 async function runApoio(pid,sample,ownCtl){
   const p=P.get(pid);
   const onA=()=>openPid===pid&&tab==="apoio"&&$("apoioOut");
-  
+  if(onA()){$("apoioOut").textContent="";$("apoioOut").append(h("div",{class:"muted thinking",text:"Analisando o caso"}))}
   const sig=(ownCtl||ctl);
-  const r=await sample.json(apoioPrompt(p),{signal:sig?sig.signal:undefined,title:"Apoio clínico · "+[p.leito,p.nome].filter(Boolean).join(" · ")});
-  const itens=normApoio(r);
+  const r=await sample.json(apoioPrompt(p),{signal:sig?sig.signal:undefined,cache:false,modelTier:$("optTier")?$("optTier").value:"default"});
+  const itens=(r&&Array.isArray(r.itens)?r.itens:[]).filter(x=>x&&x.titulo).slice(0,12).map(x=>({id:uid36(),tipo:TIPOS[x.tipo]?x.tipo:"lembrar",prioridade:SEV[x.prioridade]?x.prioridade:"media",titulo:String(x.titulo),detalhe:String(x.detalhe||""),acao:String(x.acao||""),fonte:String(x.fonte||""),pubmed:String(x.pubmed||""),done:false}));
   save(pid,{apoio:{at:Date.now(),resumo:String((r&&r.resumo)||""),itens}},0);
   if(onA()) rerenderTab(pid);
   return itens;
@@ -2205,7 +2093,7 @@ function apoioTab(pid){
   const st=h("div",{class:"status",id:"apoioSt"});
   card.append(h("div",{class:"card-h"},h("h3",{text:"Análise do caso"}),h("span",{class:"spacer"}),ap.at?h("span",{class:"small muted",text:fmtStamp(ap.at)}):null));
   const cb=h("div",{class:"card-b"});
-  cb.append(h("div",{class:"row"},go,h("label",{class:"row small muted",style:"gap:6px"},auto,"Incluir na evolução (mesma resposta do Claude)")),st);
+  cb.append(h("div",{class:"row"},go,h("label",{class:"row small muted",style:"gap:6px"},auto,"Analisar sozinho depois de cada evolução")),st);
   const out=h("div",{id:"apoioOut",class:"stack"});
   if(!ap.at) out.append(h("div",{class:"muted",text:"O Claude lê a ficha inteira (beira leito, evolução, exame físico, exames e metas) e aponta inconsistências, o que investigar, o que lembrar, red flags e diferenciais."}));
   else{
@@ -2335,9 +2223,9 @@ TEXTO COLADO:
 """
 ${text}
 """`;
-    tctl=new AbortController(); go.disabled=true; stop.hidden=false; st.textContent=""; out.className="outtext placeholder"; out.textContent="Aguardando a resposta do Claude."; al.hidden=true;
+    tctl=new AbortController(); go.disabled=true; stop.hidden=false; st.textContent=""; out.className="outtext placeholder thinking"; out.textContent="Organizando"; al.hidden=true;
     const show=txt=>{const s=splitOut(txt,sp);out.className="outtext";out.textContent=s.evo;al.hidden=!s.alerts;$("toolAlertsText").textContent=s.alerts};
-    try{ const r=await sample(prompt,{signal:tctl.signal,title:t.name}); show(r.text) }
+    try{ const r=await sample(prompt,{signal:tctl.signal,cache:false,onText:({text})=>show(text)}); show(r.text) }
     catch(e){ out.classList.remove("thinking"); if(e&&e.text)show(e.text); else out.textContent=""; if(e&&e.code!=="cancelled"){st.className="status err";st.textContent=errMsg(e)} }
     finally{ go.disabled=false; stop.hidden=true }
   };
@@ -2406,7 +2294,7 @@ async function startSession(session){
   $("acct").hidden=false; $("acctEmail").textContent=session.user.email||"";
   try{const {data}=await SB.from("settings").select("data").eq("user_id",UID).maybeSingle();const d=data&&data.data;if(d&&Array.isArray(d.templates)&&d.templates.length){templates=clone(d.templates);try{localStorage.setItem(LS_T,JSON.stringify(templates))}catch(e){}}}catch(e){}
   try{ await loadAll() }catch(e){ showBanner("Não consegui carregar seus pacientes. Confira a internet e se o banco foi criado (passo 2 do guia).") }
-  render(); checkResume();
+  render();
   if(!rtChannel){
     rtChannel=SB.channel("pacientes-"+UID).on("postgres_changes",{event:"*",schema:"public",table:"patients"},pl=>{
       if(pl.eventType==="DELETE"){const id=pl.old&&pl.old.id; if(id&&P.has(id)&&!pending.has(id)&&!writing[id]) P.delete(id)}
