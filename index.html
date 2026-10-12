@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 12/10 (3)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 12/10 (4)</span></p>
 </div>
 
 <script>
@@ -705,7 +705,8 @@ const ERR={
   prompt_too_large:"O texto é grande demais. Divida em partes.",
   refused:"O Claude não processou este texto. Revise o conteúdo e tente de novo.",
   empty_completion:"Não veio resposta. Tente de novo.",
-  invalid_json:"A resposta veio fora do formato esperado. Tente de novo."
+  invalid_json:"A resposta veio fora do formato esperado. Tente de novo.",
+  timeout:"A IA demorou demais e a tentativa foi cancelada."
 };
 const errMsg=e=>(ERR[e&&e.code]||"Falha de conexão com a IA. Tente de novo.")+(e&&e.detail?" (detalhe: "+e.detail+")":"");
 
@@ -744,11 +745,21 @@ async function callClaude(input,opts){
   for(let i=0;i<tries.length;i++){
     if(tries[i]){ if(opts.onRetry){try{opts.onRetry(i,tries.length-1)}catch(e){}} await new Promise((res,rej)=>{const t=setTimeout(res,tries[i]); if(opts.signal) opts.signal.addEventListener("abort",()=>{clearTimeout(t);rej({code:"cancelled"})},{once:true})}); }
     try{ return await callClaudeOnce(input,opts) }
-    catch(e){ last=e; const retry=e&&(e.code==="rate_limited"||e.code==="upstream_error"||e.code==="empty_completion")&&!(e.text&&e.text.trim()); if(!retry) throw e; }
+    catch(e){ last=e; const retry=e&&(e.code==="rate_limited"||e.code==="upstream_error"||e.code==="empty_completion"||e.code==="timeout")&&!(e.text&&e.text.trim()); if(!retry) throw e; }
   }
   throw last;
 }
 async function callClaudeOnce(input,opts){
+  const own=new AbortController(); let why=null;
+  const kill=(w)=>{why=w; own.abort()};
+  if(opts.signal){ if(opts.signal.aborted) own.abort(); else opts.signal.addEventListener("abort",()=>own.abort(),{once:true}) }
+  let wd=setTimeout(()=>kill("a IA não começou a responder em 60 s"),60000);
+  const poke=()=>{clearTimeout(wd); wd=setTimeout(()=>kill("a IA parou de responder por 60 s"),60000)};
+  try{ return await callClaudeRaw(input,{...opts,signal:own.signal,_poke:poke}) }
+  catch(e){ if(why&&e&&e.code==="cancelled") throw {code:"timeout",text:e.text,detail:why}; throw e }
+  finally{ clearTimeout(wd) }
+}
+async function callClaudeRaw(input,opts){
   if(!SB) throw {code:"session_expired"};
   const {data:{session}}=await SB.auth.getSession(); if(!session) throw {code:"session_expired"};
   const imgs=[]; if(opts.images){const arr=opts.images instanceof Blob?[opts.images]:[...opts.images]; for(const b of arr.slice(0,8)) imgs.push(await prepImage(b))}
@@ -764,9 +775,10 @@ async function callClaudeOnce(input,opts){
     throw {code,message:t,detail:errDetail(resp.status,t)};
   }
   const rd=resp.body.getReader(), dec=new TextDecoder(); let buf="";
+  if(opts.signal) opts.signal.addEventListener("abort",()=>{try{rd.cancel()}catch(e){}},{once:true});
   try{
     for(;;){
-      const {done,value}=await rd.read(); if(done) break;
+      const {done,value}=await rd.read(); if(done) break; if(opts._poke) opts._poke();
       buf+=dec.decode(value,{stream:true}).replace(/\r/g,"");
       let i; while((i=buf.indexOf("\n\n"))>=0){
         const ev=buf.slice(0,i); buf=buf.slice(i+2);
@@ -774,10 +786,12 @@ async function callClaudeOnce(input,opts){
         let d; try{d=JSON.parse(line.slice(5).trim())}catch(e){continue}
         if(d.type==="content_block_delta"&&d.delta&&d.delta.type==="text_delta"){text+=d.delta.text; if(opts.onText){try{opts.onText({text,delta:d.delta.text})}catch(e){}}}
         else if(d.type==="message_delta"&&d.delta&&d.delta.stop_reason==="max_tokens") truncated=true;
+        else if(d.type==="message_delta"&&d.delta&&d.delta.stop_reason==="refusal"&&!text.trim()) throw {code:"refused",detail:"a IA recusou processar este texto"};
         else if(d.type==="error") throw {code:d.error&&d.error.type==="overloaded_error"?"rate_limited":"upstream_error",text,detail:"IA · "+((d.error&&(d.error.message||d.error.type))||"erro")};
       }
     }
   }catch(e){ if(e&&e.name==="AbortError") throw {code:"cancelled",text}; if(e&&e.code) throw e; throw {code:"upstream_error",text,detail:"a conexão caiu no meio da resposta"} }
+  if(opts.signal&&opts.signal.aborted) throw {code:"cancelled",text};
   if(!text.trim()) throw {code:"empty_completion",detail:"a IA não devolveu texto"};
   return {text,truncated};
 }
@@ -1555,7 +1569,7 @@ function renderOut(pid,text,split,final){
 function splitOut(text,split){const i=split?text.indexOf(MARK):-1;return {evo:(i>=0?text.slice(0,i):text).replace(/\s+$/,""),alerts:i>=0?text.slice(i+MARK.length).trim():""}}
 let lastTurns=null;
 async function runEvolution(pid,adjust){
-  if(running) return;
+  if(running){ const s0=$("evoSt"); if(s0){s0.className="status";s0.textContent="Já estou gerando. Aguarde ou toque em Parar."} return }
   const sample=await sampleP; const st=$("evoSt");
   if(!sample){st.className="status err";st.textContent="Entre na sua conta para usar a IA.";return}
   ctl=new AbortController(); setBusy(true); st.className="status"; st.textContent="";
@@ -1598,6 +1612,9 @@ async function runEvolution(pid,adjust){
   }catch(e){
     if(onPage(pid)){ $("evoOut").classList.remove("thinking"); if(e&&e.text)renderOut(pid,e.text,true,false); else if(!(P.get(pid).evo||{}).out){$("evoOut").textContent=""}
       $("outTag").className="tag";$("outTag").textContent=e&&e.code==="cancelled"?"Interrompida":"Incompleta";
+      if(e&&e.code!=="cancelled"&&!(e.text&&e.text.trim())){ const o=$("evoOut"); o.className="outtext"; o.textContent="";
+        o.append(h("div",{class:"status err",style:"white-space:normal",text:"Não consegui gerar a evolução. "+errMsg(e)}),
+          h("button",{type:"button",class:"btn",style:"margin-top:10px",onclick:()=>runEvolution(pid)},"Tentar de novo")); }
       if(e&&e.code!=="cancelled"){st.className="status err";st.textContent=errMsg(e)+" Os dados de hoje continuam salvos; toque em Reorganizar evolução para tentar de novo."} }
   }finally{ setBusy(false); refreshHead(pid); }
 }
