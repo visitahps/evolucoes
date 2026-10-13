@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 12/10 (7)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 13/10 (2)</span></p>
 </div>
 
 <script>
@@ -544,6 +544,72 @@ Paciente refere compreender informações passadas e nega dúvidas ao final do a
 Procurar atendimento médico imediatamente em caso de: sinais de alarme em tópicos, evitar termos muito técnicos
 Orientações breves de dieta, exercícios, retorno a ambulatório` },
 
+{ id:"imagem", group:ENF, analise:false, name:"Exames de imagem", text:
+`Organize laudos de exames de imagem (tomografia, ultrassom, raio X, ressonância, ecocardiograma, endoscopia, cintilografia e outros) para o prontuário.
+- Para cada exame: data, nome curto do exame (ex.: TC de abdome com contraste, USG de vias urinárias, RX de tórax, Ecocardiograma transtorácico).
+- Texto: achados relevantes e a conclusão ou impressão do laudo, mostrando os resultados da mesma forma do documento, formatando em maiúsculas e minúsculas, podendo manter siglas em maiúsculo.
+- Pode omitir descrições normais longas, mas mantenha toda alteração, medidas importantes e a conclusão. Não interprete além do laudo e não invente.
+- Não use travessão, apenas hífen.` },
+
+{ id:"parecer", group:ENF, analise:false, name:"Solicitação de parecer", text:
+`Redija uma solicitação de parecer (interconsulta) para a especialidade pedida, como escrita por um médico hospitalista de enfermaria de clínica médica. Linguagem médica simples e natural, não mecânica, sem parecer feita por IA. Não utilizar travessão, apenas hífen.
+
+Modelo:
+SOLICITAÇÃO DE PARECER: [Especialidade]
+Prioridade: [eletivo, prioritário ou urgente]
+
+Paciente [idade] anos, [sexo], internado(a) na enfermaria de clínica médica desde [data] (DIH [n]) por [diagnóstico principal].
+Comorbidades: [relevantes para a pergunta]
+
+Resumo do caso: 3 a 5 frases com a história, o que foi feito até agora e a situação atual.
+
+Dados relevantes: exames laboratoriais e de imagem pertinentes à pergunta, com data, e medicações em uso que importam para a avaliação.
+
+Motivo da solicitação: [motivo]
+Pergunta: [pergunta objetiva ao especialista]
+
+Agradeço a avaliação.` },
+
+{ id:"receita", group:ENF, analise:true, name:"Receita de alta", text:
+`Elabore a receita médica para casa na alta hospitalar, a partir das medicações indicadas pelo médico, do plano de alta e das medicações de uso contínuo.
+
+RECEITUÁRIO
+
+Separe por via (Uso oral, Uso tópico, Uso subcutâneo, Uso inalatório...). Numere os itens:
+1. Nome do medicamento (nome genérico), concentração e forma ---------- quantidade (ex.: 14 comprimidos, 1 caixa, uso contínuo)
+Tomar ... (posologia em linguagem simples para o paciente: quanto, de quantas em quantas horas ou em quais horários, por quantos dias ou uso contínuo, e cuidados como em jejum ou após as refeições).
+
+Regras:
+- Mantenha as medicações de uso contínuo que seguem após a alta, marcadas como uso contínuo.
+- Medicação suspensa ou trocada durante a internação não entra. No fim, escreva "Medicações suspensas: ..." para o paciente saber o que não deve mais tomar, quando houver.
+- Medicamentos de controle especial (benzodiazepínicos, opioides, antidepressivos, antipsicóticos e outros da Portaria 344) ficam em bloco separado: RECEITUÁRIO DE CONTROLE ESPECIAL.
+- Não invente medicação, indicação ou dose. Se faltar dose ou duração, use a dose habitual de adulto e deixe para conferência na análise.
+
+Depois da receita:
+ORIENTAÇÕES DIETÉTICAS: tópicos curtos com hífen, linguagem simples, de acordo com as doenças do paciente.
+ORIENTAÇÕES GERAIS: tópicos curtos com hífen (atividade física, cuidados em casa, retorno ao ambulatório e exames pendentes).
+
+Linguagem simples, sem termos muito técnicos para o paciente. Não utilizar travessão, apenas hífen.
+
+Na análise para o médico: doses a conferir, ajuste para função renal ou hepática, interações relevantes, duplicidades e medicamentos que exigem receita especial.` },
+
+{ id:"encaminhamento", group:ENF, analise:false, name:"Encaminhamento", text:
+`Redija um encaminhamento para ambulatório de especialista após a alta hospitalar, em linguagem médica simples e natural, sem parecer feita por IA. Não utilizar travessão, apenas hífen.
+
+Modelo:
+ENCAMINHAMENTO
+Ao ambulatório de [Especialidade]
+
+Encaminho paciente [nome], [idade] anos, internado(a) na enfermaria de clínica médica de [data de internação] a [data da alta] por [diagnósticos].
+
+Resumo da internação: 3 a 5 frases com o que é relevante para a especialidade.
+Exames relevantes: laboratoriais e de imagem pertinentes, com data.
+Medicações em uso na alta: lista breve.
+Motivo do encaminhamento: [motivo]
+
+Solicito avaliação e seguimento ambulatorial.
+Atenciosamente,` },
+
 { id:"ssvv", group:ENF, analise:false, name:"Sinais vitais", text:
 `Faça um resumo dos sinais vitais conforme essa máscara:
 
@@ -839,6 +905,8 @@ sampleFn.limits=async()=>({maxPromptBytes:1e6,images:{maxCount:8,maxInputBytes:2
 const LS_T="evo.templates.v2";
 let templates=DEFAULTS.map(t=>({...t}));
 try{const s=JSON.parse(localStorage.getItem(LS_T)||"null");if(Array.isArray(s)&&s.length)templates=s}catch(e){}
+function mergeDefaults(arr){const ids=new Set(arr.map(t=>t.id));DEFAULTS.forEach(d=>{if(!ids.has(d.id))arr.push({...d})});return arr}
+templates=mergeDefaults(templates);
 const tpl=id=>templates.find(t=>t.id===id)||DEFAULTS.find(t=>t.id===id);
 const flagOf=(t,k)=>{if(t[k]!==undefined)return !!t[k];const d=DEFAULTS.find(x=>x.id===t.id);return !!(d&&d[k])};
 async function saveTemplates(){
@@ -970,7 +1038,7 @@ function newPatientForm(){
 function fld(label,id,input,cls){return h("div",{class:"field"+(cls?" "+cls:"")},h("label",{class:"label",for:id,text:label}),input)}
 
 // ===================== ficha do paciente =====================
-const TABS=[["beira","Beira leito"],["resumo","Resumo"],["evolucao","Evolução"],["exame","Exame físico"],["exames","Exames"],["apoio","Apoio clínico"]];
+const TABS=[["beira","Beira leito"],["resumo","Resumo"],["evolucao","Evolução"],["exame","Exame físico"],["exames","Exames"],["imagem","Imagem"],["parecer","Pareceres"],["apoio","Apoio clínico"],["alta","Alta"]];
 function patientView(pid){
   const p=P.get(pid);
   const wrap=h("div",{class:"stack"});
@@ -1008,7 +1076,7 @@ function patientHead(pid){
   acts.append(bEdit);
   if((p.status||"ativo")==="ativo"){
     const bAlta=h("button",{type:"button",class:"btn sec sm"},"Alta hospitalar");
-    armed(bAlta,"Confirmar alta",()=>{save(pid,{status:"alta",statusDate:todayISO()});refreshHead(pid)});
+    bAlta.onclick=()=>{tab="alta";render()};
     const bOb=h("button",{type:"button",class:"btn danger sm"},"Óbito");
     armed(bOb,"Confirmar óbito",()=>{save(pid,{status:"obito",statusDate:todayISO()});refreshHead(pid)});
     acts.append(bAlta,bOb);
@@ -1088,7 +1156,7 @@ function metasCard(pid){
   card.append(b);
   return card;
 }
-function tabContent(pid){return tab==="apoio"?apoioTab(pid):tab==="beira"?beiraTab(pid):tab==="resumo"?resumoTab(pid):tab==="evolucao"?evolucaoTab(pid):tab==="exame"?exameTab(pid):examesTab(pid)}
+function tabContent(pid){return tab==="imagem"?imagemTab(pid):tab==="parecer"?parecerTab(pid):tab==="alta"?altaTab(pid):tab==="apoio"?apoioTab(pid):tab==="beira"?beiraTab(pid):tab==="resumo"?resumoTab(pid):tab==="evolucao"?evolucaoTab(pid):tab==="exame"?exameTab(pid):examesTab(pid)}
 function rerenderTab(pid){const b=$("tabBody");if(!b||openPid!==pid)return;b.textContent="";b.append(tabContent(pid))}
 
 // ===================== EXAME FÍSICO =====================
@@ -1425,7 +1493,8 @@ function pageRules(t,split){
   return `REGRAS DA PÁGINA:
 - Responda somente com o texto final, pronto para colar no prontuário eletrônico, sem introdução, comentários ou perguntas.
 - Não use formatação markdown (negrito, itálico, asteriscos de ênfase, blocos de código). Mantenha apenas os símbolos que as instruções usam, como #, >, | e hífen. Onde as instruções usam "*" para listar o que entra numa seção, escreva o conteúdo em si, com hífen quando for lista.
-- Não invente dados clínicos que não estejam nos dados fornecidos. Seção sem informação: deixe o título com o campo vazio ou "sem informação", sem preencher.
+- Não invente dados clínicos que não estejam nos dados fornecidos. Seção sem informação: deixe o título com o campo vazio, sem preencher.
+- Conduta, plano terapêutico e orientações sempre em primeira pessoa, como o médico escreve: mantenho, ajusto, prescrevo, suspendo, inicio, solicito, aguardo, oriento, discuto.
 ${flagOf(t,"analise")?(split?`- Tudo que for análise crítica, sugestões, pendências, inconsistências, red flags ou alertas para o médico deve ficar fora do texto do prontuário: escreva no fim, depois de uma linha contendo apenas ${MARK}. Se não houver nada relevante, não escreva essa linha.`:`- Inclua a análise e as sugestões no próprio texto, como as instruções pedem.`):`- Não acrescente análise, sugestões nem comentários.`}`;
 }
 function labsContext(p,n){const l=sortedLabs(p).slice(-n).reverse();return l.length?l.map(e=>fmtDM(e.date)+": "+labLine(e).replace(/\n/g," | ")).join("\n"):""}
@@ -1447,9 +1516,18 @@ function patientContext(p){
   if(todos.length) b.push(`PENDÊNCIAS ABERTAS DO MÉDICO (inclua no plano terapêutico):\n${todos.map(t=>"- "+t.t).join("\n")}`);
   const metas=(p.metas||[]).filter(m=>!m.done);
   if(metas.length) b.push(`METAS PARA ALTA DEFINIDAS PELO MÉDICO (inclua na seção de metas para alta):\n${metas.map(m=>"- "+m.t+(m.prazo?" (prazo "+m.prazo+" dias)":"")).join("\n")}`);
+  const ic=imgsContext(p,6);
+  if(ic) b.push(`EXAMES DE IMAGEM JÁ ORGANIZADOS (use na seção de exames de imagem, como estão):\n${ic}`);
+  const pc=pareceresContext(p);
+  if(pc) b.push(`PARECERES DE ESPECIALIDADES (respostas entram como avaliação da especialidade; os aguardando resposta entram no plano como pendência):\n${pc}`);
   if(p.imp&&p.imp.text) b.push(`IMPRESSÃO DA EVOLUÇÃO ANTERIOR (${fmtStamp(p.imp.at)}, só para contexto e comparação):\n${p.imp.text}`);
   return b.join("\n\n");
 }
+const EVO_RULES=split=>`
+REGRAS DO MÉDICO PARA A EVOLUÇÃO (ele revisa e valida tudo antes de assinar; o objetivo é poupar tempo):
+- Hipóteses diagnósticas: ajuste sempre que a evolução, os exames, os pareceres ou uma inconsistência pedirem. Pode reordenar, refinar (ex.: ITU para pielonefrite aguda quando os dados sustentarem), marcar como resolvida ou em resolução e acrescentar hipótese nova quando houver dado que a sustente.${split?` Diga na análise, depois de ${MARK}, o que mudou na lista de hipóteses e por quê.`:""}
+- Exame físico: nunca escreva "não feito", "não mencionado", "não visto", "não checado", "não avaliado", "sem informação" ou equivalentes. Use os achados de hoje (exame marcado e texto colado); para o que não veio hoje, mantenha a descrição do exame físico da evolução anterior, ajustando ao quadro atual, ou omita a linha.${split?` Na análise, liste em uma linha os itens do exame físico repetidos da evolução anterior, para o médico confirmar à beira leito.`:""}
+- Plano terapêutico e conduta em primeira pessoa: mantenho, ajusto, prescrevo, suspendo, inicio, solicito, aguardo, oriento.`;
 function buildEvoPrompt(p,raw,extra,split){
   const t=tpl("evolucao");
   return `Você recebe as instruções de trabalho de um médico e os dados de um paciente internado. Aplique as instruções.
@@ -1460,6 +1538,7 @@ ${t.text}
 """
 
 ${pageRules(t,split)}
+${EVO_RULES(split)}
 
 ${patientContext(p)}
 ${extra?`\nOBSERVAÇÃO DO MÉDICO PARA HOJE:\n${extra}\n`:""}
@@ -1618,7 +1697,7 @@ async function runEvolution(pid,adjust){
     let r; try{ r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"quick",onText:({text})=>{gotText=true;renderOut(pid,text,split,false)},
       onRetry:(i,n)=>{if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}}}); } finally { clearInterval(tick) }
     const so=splitOut(r.text,split);
-    save(pid,{evo:{out:so.evo,alerts:so.alerts,at:Date.now()}},0);
+    save(pid,{evo:{out:so.evo,alerts:so.alerts,at:Date.now()},evoHist:[...(P.get(pid).evoHist||[]).filter(x=>x.date!==todayISO()),{date:todayISO(),at:Date.now(),out:so.evo}].slice(-40)},0);
     lastTurns={pid,turns:[...(Array.isArray(input)?input:[{role:"user",content:input}]),{role:"assistant",content:r.text}]};
     renderOut(pid,r.text,split,true);
     if(onPage(pid))$("adjBox").hidden=false;
@@ -1682,6 +1761,283 @@ async function runImp(pid,sample){
     if(e&&e.code==="cancelled") throw e;
     if(onPage(pid)){$("impText").className="outtext placeholder";$("impText").textContent="Não consegui gerar a impressão desta vez. Toque em \"Gerar impressão de novo\".";$("impPill").textContent=""}
   }
+}
+
+// ===================== IMAGEM · PARECERES · ALTA =====================
+const ESPECIALIDADES=["Cardiologia","Cirurgia geral","Cirurgia vascular","Dermatologia","Endocrinologia","Gastroenterologia","Geriatria","Hematologia","Hepatologia","Infectologia","Nefrologia","Neurologia","Neurocirurgia","Nutrologia","Oftalmologia","Oncologia","Ortopedia","Otorrinolaringologia","Cuidados paliativos","Pneumologia","Proctologia","Psiquiatria","Reumatologia","Urologia","Ginecologia","Fisioterapia","Fonoaudiologia","Nutrição","Psicologia","Serviço social"];
+function espList(id){return h("datalist",{id},...ESPECIALIDADES.map(e=>h("option",{value:e})))}
+const curTier=()=>{try{return localStorage.getItem("evo.tier")||"quick"}catch(e){return "quick"}};
+const pName=p=>[p.leito?"Leito "+p.leito:"",p.nome].filter(Boolean).join(" · ");
+const busyOps={};
+
+// gera texto com a IA e mostra aos poucos; devolve {main, alerts}
+async function streamDoc(o){
+  const sample=await sampleP;
+  if(!sample){o.st.className="status err";o.st.textContent="Entre na sua conta para usar a IA.";return null}
+  const btns=o.btns||[]; btns.forEach(b=>b.disabled=true);
+  o.st.className="status thinking"; o.st.textContent="Escrevendo";
+  if(o.out){o.out.className="outtext placeholder thinking";o.out.textContent="Escrevendo"}
+  if(o.al) o.al.hidden=true;
+  const T0=Date.now(); let got=false;
+  const tick=setInterval(()=>{if(!got&&o.st.isConnected)o.st.textContent="Escrevendo · "+Math.round((Date.now()-T0)/1000)+" s"},1000);
+  const show=t=>{const s=splitOut(t,!!o.split); if(o.out&&o.out.isConnected){o.out.className="outtext";o.out.textContent=s.evo} if(o.al&&o.al.isConnected){o.al.hidden=!s.alerts;o.alt.textContent=s.alerts} return s};
+  try{
+    const r=await sample(o.prompt,{cache:false,modelTier:o.tier||curTier(),onText:({text})=>{got=true;show(text)}});
+    const s=show(r.text);
+    o.st.className=r.truncated?"status err":"status"; o.st.textContent=r.truncated?"O texto foi cortado no limite de tamanho. Revise o final.":(o.ok||"Pronto e salvo.");
+    return {main:s.evo,alerts:s.alerts};
+  }catch(e){
+    if(o.out&&o.out.isConnected&&!(e&&e.text)){o.out.className="outtext placeholder";o.out.textContent=o.empty||""}
+    if(e&&e.text) show(e.text);
+    o.st.className="status err"; o.st.textContent="Não consegui gerar. "+errMsg(e);
+    return null;
+  }finally{clearInterval(tick); btns.forEach(b=>b.disabled=false)}
+}
+function docPrompt(tid,p,blocks,split){
+  const t=tpl(tid);
+  return `Você recebe as instruções de trabalho de um médico e os dados de um paciente internado. Aplique as instruções.
+
+INSTRUÇÕES DO MÉDICO:
+"""
+${t.text}
+"""
+
+${pageRules(t,split)}
+- Não use travessão (—) nem meia-risca (–); use apenas hífen (-).
+
+${blocks.filter(Boolean).join("\n\n")}`;
+}
+function printDoc(title,text,p){
+  const fr=document.createElement("iframe"); fr.style.cssText="position:fixed;right:0;bottom:0;width:0;height:0;border:0"; document.body.append(fr);
+  const d=fr.contentDocument; const esc=s=>String(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]);
+  d.open(); d.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font:12pt/1.5 Georgia,serif;margin:18mm;color:#000}h1{font:600 13pt Arial,sans-serif;margin:0 0 4px}.m{font:10pt Arial,sans-serif;color:#333;margin-bottom:14px;border-bottom:1px solid #999;padding-bottom:8px}pre{white-space:pre-wrap;font:inherit;margin:0}.s{margin-top:48px;text-align:center;font:10pt Arial,sans-serif}.s div{border-top:1px solid #000;width:60%;margin:0 auto 4px}</style></head><body><h1>${esc(title)}</h1><div class="m">${esc(p.nome||"")}${p.idade?" · "+p.idade+" anos":""}${p.leito?" · Leito "+esc(p.leito):""} · ${new Date().toLocaleDateString("pt-BR")}</div><pre>${esc(text)}</pre><div class="s"><div></div>Assinatura e carimbo do médico</div></body></html>`); d.close();
+  setTimeout(()=>{try{fr.contentWindow.focus();fr.contentWindow.print()}catch(e){} setTimeout(()=>fr.remove(),60000)},300);
+}
+function outCard(title,id,text,placeholder,p,printTitle,extraHead){
+  const st=h("div",{class:"status",id:id+"St"});
+  const out=h("pre",{class:"outtext"+(text?"":" placeholder"),id:id+"Out",text:text||placeholder});
+  const al=h("div",{class:"alerts",id:id+"Al",hidden:true},h("h4",{text:"Conferir antes de entregar · não copiar"}),h("div",{class:"outtext",id:id+"AlT"}));
+  const card=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:title}),h("span",{class:"spacer"}),extraHead||null,
+      h("button",{type:"button",class:"btn quiet sm",onclick:()=>{if(out.classList.contains("placeholder"))return;printDoc(printTitle||title,out.textContent,p)}},"Imprimir"),
+      h("button",{type:"button",class:"btn sec sm",onclick:()=>{if(out.classList.contains("placeholder"))return;copyText(out.textContent,st,"Copiado.")}},"Copiar")),
+    h("div",{class:"card-b"},out,al,st));
+  return {card,out,al,alt:al.querySelector(".outtext"),st};
+}
+
+// ---------- contexto completo para alta, encaminhamento e parecer ----------
+function imgsContext(p,n){const l=(p.imgs||[]).slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));const s=n?l.slice(-n):l;return s.map(x=>(x.date?fmtDMY(x.date)+" - ":"")+(x.exame?x.exame+": ":"")+x.texto).join("\n")}
+function pareceresContext(p){return (p.pareceres||[]).map(x=>"- "+x.esp+" ("+(x.resposta?"respondido":"aguardando resposta")+", solicitado em "+fmtDMY(x.date)+")"+(x.motivo?": "+x.motivo:"")+(x.resposta?"\n  Resposta do especialista: "+x.resposta.replace(/\n+/g," "):"")).join("\n")}
+function fullContext(p,opts){
+  opts=opts||{};
+  const b=[patientContext(p)];
+  const hist=(p.evoHist||[]).slice().sort((a,c)=>a.at-c.at);
+  const ev=p.evo||{};
+  if(hist.length){
+    let total=0; const parts=[];
+    for(let i=hist.length-1;i>=0;i--){const t=String(hist[i].out||"").slice(0,6000); if(total+t.length>30000&&parts.length) break; total+=t.length; parts.unshift("["+fmtDMY(hist[i].date)+"]\n"+t)}
+    b.push("EVOLUÇÕES DIÁRIAS ORGANIZADAS (da mais antiga para a mais recente):\n"+parts.join("\n\n"));
+  } else if(ev.out) b.push("EVOLUÇÃO MAIS RECENTE:\n"+ev.out);
+  if(ev.raw) b.push("ÚLTIMO TEXTO COLADO PELO MÉDICO NA EVOLUÇÃO (pode conter história desde o PS):\n"+String(ev.raw).slice(0,15000));
+  const labs=sortedLabs(p);
+  if(labs.length>3) b.push("TODOS OS EXAMES LABORATORIAIS DA INTERNAÇÃO (do mais antigo para o mais recente):\n"+labs.map(e=>fmtDM(e.date)+": "+labLine(e).replace(/\n/g," | ")).join("\n"));
+  const imp=(p.impHist||[]); if(imp.length>1&&opts.imp!==false) b.push("IMPRESSÃO DE CADA DIA (tendência):\n"+imp.map(x=>fmtDM(new Date(x.at).toISOString().slice(0,10))+" ("+(x.trend||"-")+"): "+x.text).join("\n"));
+  return b.join("\n\n");
+}
+
+// ===================== aba IMAGEM =====================
+function imagemTab(pid){
+  const p=P.get(pid);
+  const g=h("div",{class:"grid2"});
+  const raw=h("textarea",{class:"in",id:"imgRaw",rows:"10",placeholder:"Cole aqui o laudo do exame de imagem (tomografia, ultrassom, raio X, ressonância, ecocardiograma, endoscopia...), do jeito que vem do sistema. Pode colar mais de um laudo de uma vez."});
+  const dt=h("input",{class:"in",id:"imgDate",placeholder:"DD/MM",style:"width:7em",autocomplete:"off"});
+  const st=h("div",{class:"status",id:"imgSt"});
+  const go=h("button",{type:"button",class:"btn"},"Organizar laudo");
+  const asIs=h("button",{type:"button",class:"btn quiet"},"Salvar como está");
+  const addItems=items=>{save(pid,{imgs:[...(P.get(pid).imgs||[]),...items]},0);rerenderTab(pid)};
+  asIs.onclick=()=>{const t=raw.value.trim();if(!t){st.className="status err";st.textContent="Cole o laudo primeiro.";return}
+    addItems([{id:uid36(),date:dmToISO(dt.value)||todayISO(),exame:"",texto:t,at:Date.now()}])};
+  go.onclick=async()=>{
+    const t=raw.value.trim(); if(!t){st.className="status err";st.textContent="Cole o laudo primeiro.";return}
+    const sample=await sampleP; if(!sample){st.className="status err";st.textContent="Entre na sua conta para usar a IA.";return}
+    go.disabled=asIs.disabled=true; st.className="status thinking"; st.textContent="Organizando o laudo";
+    try{
+      const r=await sample.json(`${tpl("imagem").text}
+
+Responda apenas com JSON neste formato:
+{"exames":[{"data":"AAAA-MM-DD ou vazio","exame":"nome curto do exame","texto":"achados e conclusão formatados"}]}
+Um item por exame diferente encontrado no texto. Data: a data do exame escrita no laudo; se não houver, deixe vazio.
+
+LAUDO(S):
+"""
+${t.slice(0,60000)}
+"""`,{cache:false,modelTier:"quick"});
+      const arr=(r&&Array.isArray(r.exames)?r.exames:[]).filter(x=>x&&x.texto);
+      if(!arr.length) throw {code:"invalid_json"};
+      const fallback=dmToISO(dt.value)||todayISO();
+      addItems(arr.map(x=>({id:uid36(),date:(/^\d{4}-\d{2}-\d{2}$/.test(x.data||"")&&!dt.value)?x.data:fallback,exame:String(x.exame||"").trim(),texto:String(x.texto).trim(),at:Date.now()})));
+    }catch(e){ if($("imgSt")){const s=$("imgSt");s.className="status err";s.textContent="Não consegui organizar. "+errMsg(e)+" Você pode usar Salvar como está."} }
+    finally{ go.disabled=asIs.disabled=false }
+  };
+  g.append(h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Laudo de imagem"})),h("div",{class:"card-b"},raw,
+    h("div",{class:"row"},h("label",{class:"small muted",for:"imgDate"},"Data do exame (opcional)"),dt,h("span",{class:"small muted",text:"em branco, a data vem do laudo"})),
+    h("div",{class:"row"},go,asIs),st,
+    h("div",{class:"small muted",text:"Os exames de imagem entram na evolução, no resumo de alta, nos pareceres e nos encaminhamentos."}))));
+  // lista
+  const l=(p.imgs||[]).slice().sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))||b.at-a.at);
+  const lst=h("div",{class:"status"});
+  const card=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Exames de imagem"}),h("span",{class:"spacer"}),l.length?h("button",{type:"button",class:"btn sec sm",onclick:()=>copyText(imgsContext(P.get(pid)),lst,"Todos os exames de imagem copiados.")},"Copiar todos"):null));
+  const b=h("div",{class:"card-b"});
+  if(!l.length) b.append(h("div",{class:"muted",text:"Nenhum exame de imagem registrado ainda."}));
+  l.forEach(x=>{
+    const line=(x.date?fmtDMY(x.date)+" - ":"")+(x.exame?x.exame+": ":"")+x.texto;
+    const ed=h("textarea",{class:"in",rows:"5",hidden:true}); ed.value=x.texto;
+    const ex=h("input",{class:"in",value:x.exame||"",placeholder:"Nome do exame",hidden:true});
+    const di=h("input",{class:"in",value:x.date?fmtDM(x.date):"",placeholder:"DD/MM",style:"width:7em",hidden:true});
+    const txt=h("div",{class:"outtext",text:x.texto});
+    const bEd=h("button",{type:"button",class:"btn quiet sm"},"editar");
+    bEd.onclick=()=>{ if(ed.hidden){ed.hidden=ex.hidden=di.hidden=false;txt.hidden=true;bEd.textContent="salvar";return}
+      save(pid,{imgs:P.get(pid).imgs.map(y=>y.id===x.id?{...y,texto:ed.value.trim(),exame:ex.value.trim(),date:dmToISO(di.value)||y.date}:y)});rerenderTab(pid)};
+    const bDel=h("button",{type:"button",class:"btn quiet sm"},"excluir");
+    armed(bDel,"confirmar",()=>{save(pid,{imgs:P.get(pid).imgs.filter(y=>y.id!==x.id)});rerenderTab(pid)});
+    b.append(h("div",{class:"hist-item"},
+      h("div",{class:"row"},h("span",{class:"hist-date",text:x.date?fmtDM(x.date):"-"}),h("strong",{text:x.exame||"Exame de imagem"}),h("span",{class:"spacer"}),
+        h("button",{type:"button",class:"btn quiet sm",onclick:()=>copyText(line,lst,"Copiado.")},"copiar"),bEd,bDel),
+      h("div",{class:"row"},di,ex),txt,ed));
+  });
+  b.append(lst); card.append(b);
+  g.append(card);
+  return g;
+}
+
+// ===================== aba PARECERES =====================
+function parecerTab(pid){
+  const p=P.get(pid);
+  const g=h("div",{class:"grid2"});
+  const esp=h("input",{class:"in",id:"parEsp",list:"espList",placeholder:"ex.: Cardiologia",autocomplete:"off"});
+  const pri=h("select",{class:"in",id:"parPri"},h("option",{value:"Eletivo"},"Eletivo"),h("option",{value:"Prioritário"},"Prioritário (nas próximas horas)"),h("option",{value:"Urgente"},"Urgente"));
+  const mot=h("textarea",{class:"in",id:"parMot",rows:"4",placeholder:"Motivo e pergunta ao especialista, do seu jeito. Ex.: FA de alta resposta apesar de betabloqueador, avaliar controle de FC e anticoagulação."});
+  const go=h("button",{type:"button",class:"btn"},"Gerar solicitação");
+  const oc=outCard("Solicitação de parecer","par","","A solicitação aparece aqui. Ela fica salva na lista ao lado.",p,"Solicitação de parecer");
+  go.onclick=async()=>{
+    const e=esp.value.trim(), m=mot.value.trim();
+    if(!e||!m){oc.st.className="status err";oc.st.textContent="Preencha a especialidade e o motivo.";return}
+    const r=await streamDoc({btns:[go],out:oc.out,st:oc.st,ok:"Solicitação pronta e salva. Copie para o sistema do hospital.",empty:"A solicitação aparece aqui.",
+      prompt:docPrompt("parecer",P.get(pid),[fullContext(P.get(pid),{imp:false}),
+        (P.get(pid).imgs||[]).length?"EXAMES DE IMAGEM:\n"+imgsContext(P.get(pid)):"",
+        (P.get(pid).pareceres||[]).length?"PARECERES JÁ SOLICITADOS NESTA INTERNAÇÃO:\n"+pareceresContext(P.get(pid)):"",
+        `PEDIDO DO MÉDICO:\nEspecialidade: ${e}\nPrioridade: ${pri.value}\nMotivo e pergunta: ${m}`],false)});
+    if(r&&r.main){ save(pid,{pareceres:[...(P.get(pid).pareceres||[]),{id:uid36(),esp:e,prioridade:pri.value,motivo:m,texto:r.main,date:todayISO(),at:Date.now(),resposta:""}]},0); esp.value="";mot.value=""; const lc=$("parList"); if(lc) lc.replaceWith(parList(pid)); }
+  };
+  g.append(h("div",{class:"stack"},
+    h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Solicitar parecer"})),h("div",{class:"card-b"},
+      fld("Especialidade","parEsp",esp),espList("espList"),fld("Prioridade","parPri",pri),fld("Motivo e pergunta","parMot",mot),
+      h("div",{class:"row"},go),h("div",{class:"small muted",text:"A IA monta a solicitação com resumo do caso, exames de laboratório e de imagem pertinentes e a pergunta ao especialista."}))),
+    oc.card));
+  g.append(parList(pid));
+  return g;
+}
+function parList(pid){
+  const p=P.get(pid), l=(p.pareceres||[]).slice().reverse();
+  const st=h("div",{class:"status"});
+  const card=h("div",{class:"card",id:"parList"},h("div",{class:"card-h"},h("h3",{text:"Pareceres do paciente"}),h("span",{class:"spacer"}),h("span",{class:"small muted",text:l.filter(x=>!x.resposta).length?l.filter(x=>!x.resposta).length+" aguardando":""})));
+  const b=h("div",{class:"card-b"});
+  if(!l.length) b.append(h("div",{class:"muted",text:"Nenhum parecer solicitado. As respostas que você colar aqui entram na evolução e no resumo de alta (Avaliação por Especialidades)."}));
+  l.forEach(x=>{
+    const resp=h("textarea",{class:"in",rows:"4",placeholder:"Cole aqui a resposta do especialista, como está no prontuário."}); resp.value=x.resposta||"";
+    const bResp=h("button",{type:"button",class:"btn sm"},x.resposta?"Atualizar resposta":"Salvar resposta");
+    bResp.onclick=()=>{save(pid,{pareceres:P.get(pid).pareceres.map(y=>y.id===x.id?{...y,resposta:resp.value.trim(),respAt:Date.now()}:y)});const lc=$("parList");if(lc)lc.replaceWith(parList(pid))};
+    const bDel=h("button",{type:"button",class:"btn quiet sm"},"excluir");
+    armed(bDel,"confirmar",()=>{save(pid,{pareceres:P.get(pid).pareceres.filter(y=>y.id!==x.id)});const lc=$("parList");if(lc)lc.replaceWith(parList(pid))});
+    b.append(h("div",{class:"hist-item"},
+      h("div",{class:"row"},h("strong",{text:x.esp}),h("span",{class:"pill"+(x.resposta?" ok":""),text:x.resposta?"Respondido":"Aguardando"}),x.prioridade&&x.prioridade!=="Eletivo"?h("span",{class:"pill warnp",text:x.prioridade}):null,h("span",{class:"spacer"}),h("span",{class:"small muted",text:fmtDM(x.date)})),
+      h("div",{class:"small muted",text:x.motivo}),
+      h("details",{},h("summary",{class:"small",text:"Ver solicitação"}),h("pre",{class:"outtext",text:x.texto}),h("div",{class:"row"},h("button",{type:"button",class:"btn sec sm",onclick:()=>copyText(x.texto,st,"Solicitação copiada.")},"Copiar"),h("button",{type:"button",class:"btn quiet sm",onclick:()=>printDoc("Solicitação de parecer · "+x.esp,x.texto,P.get(pid))},"Imprimir"))),
+      resp,h("div",{class:"row"},bResp,h("span",{class:"spacer"}),bDel)));
+  });
+  b.append(st); card.append(b);
+  return card;
+}
+
+// ===================== aba ALTA =====================
+function altaTab(pid){
+  const p=P.get(pid), A=p.alta||{};
+  const g=h("div",{class:"grid2"});
+  const dAlta=h("input",{class:"in",id:"altaData",type:"date",value:A.data||todayISO(),style:"max-width:12em"});
+  dAlta.onchange=()=>save(pid,{alta:{data:dAlta.value}});
+  const info=h("textarea",{class:"in",id:"altaInfo",rows:"6",placeholder:"Opcional: cole o que ainda não está no site. Ex.: história de entrada no PS, evoluções antigas, intercorrências, condição no dia da alta, retorno marcado."});
+  info.value=A.info||""; info.oninput=()=>save(pid,{alta:{info:info.value}},1200);
+  const meds=h("textarea",{class:"in",id:"altaMeds",rows:"4",placeholder:"Opcional: medicações para casa do seu jeito. Ex.: amoxicilina+clavulanato 875 12/12h até completar 7 dias, manter losartana e metformina, suspender glibenclamida."});
+  meds.value=A.meds||""; meds.oninput=()=>save(pid,{alta:{meds:meds.value}},1200);
+  const bRes=h("button",{type:"button",class:"btn"},"Gerar resumo de alta");
+  const bRec=h("button",{type:"button",class:"btn sec"},"Gerar receita");
+  const res=outCard("Resumo de alta","altaRes",A.resumo,"O resumo de alta aparece aqui, com orientações e sinais de alarme.",p,"Resumo de alta hospitalar");
+  const rec=outCard("Receita para casa","altaRec",A.receita,"A receita aparece aqui, separada por via, com orientações de dieta e gerais.",p,"Receituário");
+  if(A.receitaAlerts){rec.al.hidden=false;rec.alt.textContent=A.receitaAlerts}
+  const ctxBlocks=()=>{const q=P.get(pid),a=q.alta||{};return [fullContext(q),
+    (q.imgs||[]).length?"EXAMES DE IMAGEM DA INTERNAÇÃO:\n"+imgsContext(q):"",
+    (q.pareceres||[]).length?"AVALIAÇÕES E PARECERES DE ESPECIALIDADES (copie as respostas como estão na seção de Avaliação por Especialidades):\n"+pareceresContext(q):"",
+    `DATA DA ALTA: ${fmtDMY(a.data||todayISO())}`+(q.dataInternacao?` (internação de ${daysSince(q.dataInternacao)-(daysSince(a.data||todayISO())||0)} dias)`:""),
+    a.info?"INFORMAÇÕES ADICIONAIS DO MÉDICO PARA A ALTA:\n"+a.info:"",
+    a.meds?"MEDICAÇÕES PARA CASA INDICADAS PELO MÉDICO (prevalecem sobre qualquer outra fonte):\n"+a.meds:""]};
+  bRes.onclick=async()=>{
+    const r=await streamDoc({btns:[bRes,bRec],out:res.out,st:res.st,ok:"Resumo de alta pronto e salvo.",empty:"O resumo de alta aparece aqui.",
+      prompt:docPrompt("alta",P.get(pid),[...ctxBlocks(),"NESTA TAREFA: escreva o resumo de alta com as orientações de alta e os sinais de alarme. A receita é feita à parte, no campo Receita para casa: no resumo, cite apenas as medicações da alta de forma breve dentro do plano."],false)});
+    if(r&&r.main) save(pid,{alta:{resumo:r.main,resumoAt:Date.now()}},0);
+  };
+  bRec.onclick=async()=>{
+    const q=P.get(pid);
+    const r=await streamDoc({btns:[bRes,bRec],out:rec.out,al:rec.al,alt:rec.alt,split:true,st:rec.st,ok:"Receita pronta e salva. Confira doses antes de entregar.",empty:"A receita aparece aqui.",
+      prompt:docPrompt("receita",q,[...ctxBlocks(),(q.alta||{}).resumo?"RESUMO DE ALTA JÁ ESCRITO:\n"+q.alta.resumo:""],true)});
+    if(r&&r.main) save(pid,{alta:{receita:r.main,receitaAlerts:r.alerts||"",receitaAt:Date.now()}},0);
+  };
+  const st=h("div",{class:"status"});
+  const isAtivo=(p.status||"ativo")==="ativo";
+  const bFim=h("button",{type:"button",class:"btn"+(isAtivo?"":" quiet")},isAtivo?"Dar alta hospitalar":"Paciente já está de alta");
+  if(isAtivo) armed(bFim,"Confirmar alta",()=>{save(pid,{status:"alta",statusDate:(P.get(pid).alta||{}).data||todayISO()});refreshHead(pid);st.className="status";st.textContent="Alta registrada. O paciente foi para a lista Alta."});
+  else bFim.disabled=true;
+  const left=h("div",{class:"stack"},
+    h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Preparar a alta"})),h("div",{class:"card-b"},
+      h("div",{class:"row"},h("label",{class:"small muted",for:"altaData"},"Data da alta"),dAlta),
+      fld("Informações para o resumo","altaInfo",info),fld("Medicações para casa","altaMeds",meds),
+      h("div",{class:"row"},bRes,bRec),
+      h("div",{class:"small muted",text:"Entram sozinhos: dados do cadastro, evoluções de cada dia, exames laboratoriais e de imagem, pareceres, metas e beira leito."}))),
+    encCard(pid),
+    h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Finalizar"})),h("div",{class:"card-b"},h("div",{class:"row"},bFim),st)));
+  g.append(left,h("div",{class:"stack"},res.card,rec.card));
+  return g;
+}
+function encCard(pid){
+  const p=P.get(pid);
+  const esp=h("input",{class:"in",id:"encEsp",list:"espList2",placeholder:"ex.: Nefrologia",autocomplete:"off"});
+  const mot=h("textarea",{class:"in",id:"encMot",rows:"3",placeholder:"Motivo do encaminhamento. Ex.: seguimento de DRC estágio 4 após IRA, avaliar preparo para TRS."});
+  const go=h("button",{type:"button",class:"btn sec"},"Gerar encaminhamento");
+  const st=h("div",{class:"status"});
+  const out=h("pre",{class:"outtext placeholder",text:"O encaminhamento aparece aqui e fica salvo na lista abaixo."});
+  go.onclick=async()=>{
+    const e=esp.value.trim(), m=mot.value.trim();
+    if(!e||!m){st.className="status err";st.textContent="Preencha a especialidade e o motivo.";return}
+    const q=P.get(pid);
+    const r=await streamDoc({btns:[go],out,st,ok:"Encaminhamento pronto e salvo.",empty:"",
+      prompt:docPrompt("encaminhamento",q,[fullContext(q,{imp:false}),(q.imgs||[]).length?"EXAMES DE IMAGEM:\n"+imgsContext(q):"",(q.pareceres||[]).length?"PARECERES:\n"+pareceresContext(q):"",
+        (q.alta||{}).resumo?"RESUMO DE ALTA:\n"+q.alta.resumo:"",(q.alta||{}).receita?"RECEITA DE ALTA:\n"+q.alta.receita:"",
+        `PEDIDO DO MÉDICO:\nEspecialidade: ${e}\nMotivo: ${m}`],false)});
+    if(r&&r.main){save(pid,{alta:{enc:[...((P.get(pid).alta||{}).enc||[]),{id:uid36(),esp:e,motivo:m,texto:r.main,at:Date.now()}]}},0);esp.value="";mot.value="";const c=$("encList");if(c)c.replaceWith(encList(pid))}
+  };
+  return h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Encaminhamento para especialista"})),h("div",{class:"card-b"},
+    fld("Especialidade","encEsp",esp),espList("espList2"),fld("Motivo","encMot",mot),h("div",{class:"row"},go),st,out,encList(pid)));
+}
+function encList(pid){
+  const l=((P.get(pid).alta||{}).enc||[]).slice().reverse(); const st=h("div",{class:"status"});
+  const box=h("div",{id:"encList"});
+  l.forEach(x=>{
+    const bDel=h("button",{type:"button",class:"btn quiet sm"},"excluir");
+    armed(bDel,"confirmar",()=>{save(pid,{alta:{enc:(P.get(pid).alta.enc||[]).filter(y=>y.id!==x.id)}});const c=$("encList");if(c)c.replaceWith(encList(pid))});
+    box.append(h("div",{class:"hist-item"},h("div",{class:"row"},h("strong",{text:x.esp}),h("span",{class:"spacer"}),h("span",{class:"small muted",text:fmtStamp(x.at)})),
+      h("details",{},h("summary",{class:"small",text:"Ver encaminhamento"}),h("pre",{class:"outtext",text:x.texto})),
+      h("div",{class:"row"},h("button",{type:"button",class:"btn sec sm",onclick:()=>copyText(x.texto,st,"Encaminhamento copiado.")},"Copiar"),h("button",{type:"button",class:"btn quiet sm",onclick:()=>printDoc("Encaminhamento · "+x.esp,x.texto,P.get(pid))},"Imprimir"),h("span",{class:"spacer"}),bDel)));
+  });
+  box.append(st);
+  return box;
 }
 
 // ===================== BEIRA LEITO =====================
@@ -2378,7 +2734,7 @@ let rtChannel=null;
 async function startSession(session){
   UID=session.user.id; persist=true; gate=null; sampleP=Promise.resolve(sampleFn);
   $("acct").hidden=false; $("acctEmail").textContent=session.user.email||"";
-  try{const {data}=await SB.from("settings").select("data").eq("user_id",UID).maybeSingle();const d=data&&data.data;if(d&&Array.isArray(d.templates)&&d.templates.length){templates=clone(d.templates);try{localStorage.setItem(LS_T,JSON.stringify(templates))}catch(e){}}}catch(e){}
+  try{const {data}=await SB.from("settings").select("data").eq("user_id",UID).maybeSingle();const d=data&&data.data;if(d&&Array.isArray(d.templates)&&d.templates.length){templates=mergeDefaults(clone(d.templates));try{localStorage.setItem(LS_T,JSON.stringify(templates))}catch(e){}}}catch(e){}
   try{ await loadAll() }catch(e){ showBanner("Não consegui carregar seus pacientes. Confira a internet e se o banco foi criado (passo 2 do guia).") }
   render();
   if(!rtChannel){
