@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 13/10 (7)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 13/10 (8)</span></p>
 </div>
 
 <script>
@@ -1502,11 +1502,19 @@ function pageRules(t,split){
 - Conduta, plano terapêutico e orientações sempre em primeira pessoa, como o médico escreve: mantenho, ajusto, prescrevo, suspendo, inicio, solicito, aguardo, oriento, discuto.
 ${flagOf(t,"analise")?(split?`- Tudo que for análise crítica, sugestões, pendências, inconsistências, red flags ou alertas para o médico deve ficar fora do texto do prontuário: escreva no fim, depois de uma linha contendo apenas ${MARK}. Se não houver nada relevante, não escreva essa linha.`:`- Inclua a análise e as sugestões no próprio texto, como as instruções pedem.`):`- Não acrescente análise, sugestões nem comentários.`}`;
 }
-function labsContext(p,n){const l=sortedLabs(p).slice(-n).reverse();return l.length?l.map(e=>fmtDM(e.date)+": "+labLine(e).replace(/\n/g," | ")).join("\n"):""}
+const LAB_NICE={LEUC:"Leuc",HB:"Hb",HT:"Ht",PLQ:"Plq",CREAT:"Creat",UR:"Ur"};
+function labNice(e){
+  const it=k=>{const v=e.v[k]; if(k==="TAP-Ativ") return "TAP "+num(v)+"%"; if(k==="TAP-Seg") return "TAP "+num(v)+" seg"; const u=(e.u||{})[k]; return (LAB_NICE[k]||k)+" "+num(v)+(u&&k==="PCR"?" "+u:"")};
+  const main=LABKEYS.filter(k=>!GSA.has(k)&&e.v&&e.v[k]!=null).map(it), gsa=LABKEYS.filter(k=>GSA.has(k)&&e.v&&e.v[k]!=null).map(it);
+  const out=[main.join(" | ")]; if(gsa.length) out.push("GSA: "+gsa.join(" | ")); if(e.outros) out.push(e.outros); if(e.obs) out.push("Obs.: "+e.obs);
+  return out.filter(Boolean);
+}
+function labsContext(p,n){const l=sortedLabs(p).slice(-n).reverse();return l.length?l.map(e=>{const x=labNice(e);return "- "+fmtDM(e.date)+": "+x[0]+(x.length>1?"\n  "+x.slice(1).join("\n  "):"")}).join("\n"):""}
 function patientContext(p){
   const b=[];
   const d=daysSince(p.dataInternacao);
-  b.push(`DADOS DO CADASTRO:\nIdade: ${p.idade?p.idade+" anos":"não informada"}\nSexo: ${p.sexo==="F"?"feminino":p.sexo==="M"?"masculino":"não informado"}\nData de internação: ${p.dataInternacao?fmtDMY(p.dataInternacao)+(d!=null?" (DIH "+d+")":""):"não informada"}\nProcedência: ${p.procedencia||"não informada"}\nHipótese diagnóstica principal: ${p.hd||"não informada"}`);
+  b.push("DATA DE HOJE: "+fmtDMY(todayISO())+". Use para o DIH, para contar os dias de antibiótico (D0 é o dia de início; hoje é D + número de dias desde o D0) e para chamar de \"hoje\" só o que for de hoje: exame de outro dia é citado pela data (ex.: \"labs de 12/10\").");
+  b.push("DADOS DO CADASTRO (o que não estiver aqui vem do texto colado; nunca apague do texto um dado só porque falta no cadastro):\n"+[p.idade?"Idade: "+p.idade+" anos":"",p.sexo==="F"?"Sexo: feminino":p.sexo==="M"?"Sexo: masculino":"",p.dataInternacao?"Data de internação: "+fmtDMY(p.dataInternacao)+(d!=null?" (DIH "+d+")":""):"",p.procedencia?"Procedência: "+p.procedencia:"",p.hd?"Hipótese diagnóstica principal: "+p.hd:""].filter(Boolean).join("\n"));
   const ev=p.evo||{};
   if(ev.ssvvLine) b.push(`SINAIS VITAIS DAS ÚLTIMAS 24H, JÁ RESUMIDOS: copie exatamente esta linha na seção de controles (sinais vitais).\n${ev.ssvvLine}`);
   const devs=ev.devs||[];
@@ -1533,7 +1541,11 @@ REGRAS DO MÉDICO PARA A EVOLUÇÃO (ele revisa e valida tudo antes de assinar; 
 - Hipóteses diagnósticas: ajuste sempre que a evolução, os exames, os pareceres ou uma inconsistência pedirem. Pode reordenar, refinar (ex.: ITU para pielonefrite aguda quando os dados sustentarem), marcar como resolvida ou em resolução e acrescentar hipótese nova quando houver dado que a sustente.${split?` Diga na análise, depois de ${MARK}, o que mudou na lista de hipóteses e por quê.`:""}
 - Exame físico: nunca escreva "não feito", "não mencionado", "não visto", "não checado", "não avaliado", "sem informação" ou equivalentes. Use os achados de hoje (exame marcado e texto colado); para o que não veio hoje, mantenha a descrição do exame físico da evolução anterior, ajustando ao quadro atual, ou omita a linha.${split?` Na análise, liste em uma linha os itens do exame físico repetidos da evolução anterior, para o médico confirmar à beira leito.`:""}
 - Plano terapêutico e conduta em primeira pessoa: mantenho, ajusto, prescrevo, suspendo, inicio, solicito, aguardo, oriento.
-- Impressão clínica integrada à seção Evolução: mantenha todas as informações do dia e feche o texto da Evolução com a impressão do caso, escrita como continuação natural, sem título separado de "Impressão". Em 1 a 3 frases: síntese do caso, se está em melhora, piora ou estável e em que se baseia (clínica, sinais vitais e exames). Só compare exame com valor anterior quando os dois valores estiverem escritos nos dados; sem valor anterior nos dados, não compare e não cite valor anterior. Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
+- Formato: coloque "| " antes de cada título de seção (ex.: "| Hipóteses Diagnósticas:", "| Exames Complementares:"), como no texto do médico.
+- Campos que o texto colado preenche (procedência, HPMA, culturas, especialidades) se mantêm; atualize, não apague.
+- Exames laboratoriais: uma linha por data ("- DD/MM: ..."), gasometria em linha própria logo abaixo, só a primeira letra maiúscula nos nomes (Leuc, Hb, Creat, Ur) e siglas como estão (PCR, INR, TAP, pH, pO2).
+- Plano terapêutico: mantenha as linhas que o médico escreveu, cada uma na sua linha, apenas em primeira pessoa e com grafia corrigida; não junte em parágrafo. Condutas novas entram como tópicos.
+- Impressão clínica integrada à seção Evolução: mantenha todas as informações do dia e feche o texto da Evolução com a impressão do caso, escrita como continuação natural, sem título separado e sem escrever a palavra "Impressão:". Em 1 a 3 frases: síntese do caso, se está em melhora, piora ou estável e em que se baseia (clínica, sinais vitais e exames). Só compare exame com valor anterior quando os dois valores estiverem escritos nos dados; sem valor anterior nos dados, não compare e não cite valor anterior. Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
 function buildEvoPrompt(p,raw,extra,split){
   const t=tpl("evolucao");
   return `Você recebe as instruções de trabalho de um médico e os dados de um paciente internado. Aplique as instruções.
@@ -1681,7 +1693,8 @@ function renderOut(pid,text,split,final){
   $("alertsBox").hidden=!al; $("alertsText").textContent=al;
   if(final){$("outTag").className="tag done";$("outTag").textContent="Salva "+fmtStamp(Date.now())}
 }
-function splitOut(text,split){const i=split?text.indexOf(MARK):-1;return {evo:(i>=0?text.slice(0,i):text).replace(/\s+$/,""),alerts:i>=0?text.slice(i+MARK.length).trim():""}}
+function splitOut(text,split){let i=split?text.indexOf(MARK):-1;
+  if(split&&i<0){const m=text.match(/\n\s*\|?\s*#*\s*An[aá]lise [Cc]r[ií]tica[^\n]*\n/); if(m){const j=m.index; return {evo:text.slice(0,j).replace(/\s+$/,""),alerts:text.slice(j).trim()}}}return {evo:(i>=0?text.slice(0,i):text).replace(/\s+$/,""),alerts:i>=0?text.slice(i+MARK.length).trim():""}}
 let lastTurns=null;
 async function runEvolution(pid,adjust){
   if(running){ const s0=$("evoSt"); if(s0){s0.className="status";s0.textContent="Já estou gerando. Aguarde ou toque em Parar."} return }
