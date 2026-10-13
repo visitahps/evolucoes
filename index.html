@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 13/10 (4)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 13/10 (7)</span></p>
 </div>
 
 <script>
@@ -1099,7 +1099,10 @@ function patientHead(pid){
     fld("Hipótese diagnóstica principal","edHd",h("input",{class:"in",id:"edHd",value:p.hd||"",autocomplete:"off"}),"wide")
   ),h("div",{class:"row"},h("button",{class:"btn",type:"submit"},"Salvar dados"),h("button",{class:"btn quiet",type:"button",onclick:()=>{ef.hidden=true}},"Fechar"))));
   ef.querySelector("#edSexo").value=p.sexo||"";
-  ef.onsubmit=e=>{e.preventDefault();save(pid,{leito:$("edLeito").value.trim(),nome:$("edNome").value.trim().toUpperCase(),idade:$("edIdade").value?+$("edIdade").value:null,sexo:$("edSexo").value||null,dataInternacao:$("edData").value||null,procedencia:$("edProc").value.trim(),hd:$("edHd").value.trim()});refreshHead(pid)};
+  ef.onsubmit=e=>{e.preventDefault();
+    { const oldN=normName(P.get(pid).nome||""), newN=normName($("edNome").value);
+      if(oldN&&newN&&oldN.split(" ")[0]!==newN.split(" ")[0]&&!window.confirm("Você está trocando o nome de "+P.get(pid).nome+" para "+$("edNome").value.toUpperCase()+".\n\nSe for OUTRO paciente no mesmo leito, toque em Cancelar e crie uma ficha nova (+ Novo paciente). Senão, os exames, evoluções e pareceres do paciente anterior ficam misturados nesta ficha.\n\nToque em OK só se for o mesmo paciente (correção de nome).")) return; }
+    save(pid,{leito:$("edLeito").value.trim(),nome:$("edNome").value.trim().toUpperCase(),idade:$("edIdade").value?+$("edIdade").value:null,sexo:$("edSexo").value||null,dataInternacao:$("edData").value||null,procedencia:$("edProc").value.trim(),hd:$("edHd").value.trim()});refreshHead(pid)};
   box.append(ef);
   return box;
 }
@@ -1381,7 +1384,7 @@ function examesTab(pid){
   const wrap=h("div",{class:"stack"});
   const g=h("div",{class:"grid2"});
   // entrada
-  const inCard=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Laudo laboratorial"})));
+  const inCard=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Laudo laboratorial · "+(p.nome||"")})));
   const ib=h("div",{class:"card-b"});
   const raw=h("textarea",{class:"in",id:"labRaw",rows:"9",placeholder:"Cole aqui o resultado laboratorial do dia, do jeito que vem do sistema."});
   const dt=h("input",{class:"in",id:"labDate",placeholder:"DD/MM",style:"width:7em",autocomplete:"off"});
@@ -1437,6 +1440,7 @@ async function runLabs(pid,raw,dt,obs,st,go){
   const text=raw.value.trim(); if(!text){st.className="status err";st.textContent="Cole o laudo primeiro.";raw.focus();return}
   const override=dt.value.trim()?dmToISO(dt.value):null;
   if(dt.value.trim()&&!override){st.className="status err";st.textContent="Data inválida. Use DD/MM.";return}
+  if(!confirmOther(text,pid,"o laudo colado")){st.className="status err";st.textContent="Cancelado. Confira se está na ficha certa.";return}
   const sample=await sampleP; if(!sample){st.className="status err";st.textContent="Entre na sua conta para usar a IA.";return}
   go.disabled=true; st.className="status thinking"; st.textContent="Lendo o laudo";
   const prompt=`Leia o laudo laboratorial abaixo e extraia os valores.
@@ -1464,9 +1468,9 @@ ${text}
     const r=await sample.json(prompt,{cache:false,modelTier:"quick"});
     const col=(r&&Array.isArray(r.coletas))?r.coletas:[];
     if(!col.length) throw {code:"empty_completion"};
-    let labs=(P.get(pid).labs||[]).slice(); let added=0;
+    let labs=(P.get(pid).labs||[]).slice(); let added=0; const rawSet=numSet(text), dropped=[];
     col.forEach(c=>{
-      const v={}; for(const k of LABKEYS){const x=c.valores&&c.valores[k];const n=typeof x==="number"?x:typeof x==="string"?parseFloat(x.replace(",",".")):NaN;if(isFinite(n))v[k]=n}
+      const v={}; for(const k of LABKEYS){const x=c.valores&&c.valores[k];const n=typeof x==="number"?x:typeof x==="string"?parseFloat(x.replace(",",".")):NaN;if(isFinite(n)){ if(hasNum(rawSet,n)) v[k]=n; else dropped.push(k+" "+num(n)) }}
       const u={}; ["Lactato","PCR"].forEach(k=>{if(c.unidades&&c.unidades[k])u[k]=String(c.unidades[k])});
       const date=(col.length===1&&override)||override&&!c.data?override:(dmToISO(c.data)||override||todayISO());
       const outros=String(c.outros||"").trim(), ob=obs.value.trim();
@@ -1480,7 +1484,7 @@ ${text}
     save(pid,{labs},0);
     raw.value=""; dt.value=""; obs.value="";
     rerenderTab(pid);
-    const s2=$("labSt"); if(s2){s2.className="status";s2.textContent=added>1?added+" coletas registradas no histórico.":"Exame registrado no histórico."}
+    const s2=$("labSt"); if(s2){s2.className=dropped.length?"status err":"status";s2.textContent=(added>1?added+" coletas registradas no histórico.":"Exame registrado no histórico.")+(dropped.length?" Ignorei valores que não encontrei no laudo: "+dropped.join(", ")+". Se estiverem certos, cole de novo ou acrescente na Observação.":"")}
   }catch(e){ st.className="status err"; st.textContent=errMsg(e); }
   finally{ go.disabled=false; }
 }
@@ -1494,6 +1498,7 @@ function pageRules(t,split){
 - Responda somente com o texto final, pronto para colar no prontuário eletrônico, sem introdução, comentários ou perguntas.
 - Não use formatação markdown (negrito, itálico, asteriscos de ênfase, blocos de código). Mantenha apenas os símbolos que as instruções usam, como #, >, | e hífen. Onde as instruções usam "*" para listar o que entra numa seção, escreva o conteúdo em si, com hífen quando for lista.
 - Não invente dados clínicos que não estejam nos dados fornecidos. Seção sem informação: deixe o título com o campo vazio, sem preencher.
+- Nunca escreva valor numérico de exame, sinal vital ou dose que não esteja escrito nos dados acima, nem como valor anterior em comparação ("de X para Y"). Não estime, não arredonde, não calcule valor novo e não traga valor de outro paciente ou de exemplo. Sem o valor, não cite o exame.
 - Conduta, plano terapêutico e orientações sempre em primeira pessoa, como o médico escreve: mantenho, ajusto, prescrevo, suspendo, inicio, solicito, aguardo, oriento, discuto.
 ${flagOf(t,"analise")?(split?`- Tudo que for análise crítica, sugestões, pendências, inconsistências, red flags ou alertas para o médico deve ficar fora do texto do prontuário: escreva no fim, depois de uma linha contendo apenas ${MARK}. Se não houver nada relevante, não escreva essa linha.`:`- Inclua a análise e as sugestões no próprio texto, como as instruções pedem.`):`- Não acrescente análise, sugestões nem comentários.`}`;
 }
@@ -1528,7 +1533,7 @@ REGRAS DO MÉDICO PARA A EVOLUÇÃO (ele revisa e valida tudo antes de assinar; 
 - Hipóteses diagnósticas: ajuste sempre que a evolução, os exames, os pareceres ou uma inconsistência pedirem. Pode reordenar, refinar (ex.: ITU para pielonefrite aguda quando os dados sustentarem), marcar como resolvida ou em resolução e acrescentar hipótese nova quando houver dado que a sustente.${split?` Diga na análise, depois de ${MARK}, o que mudou na lista de hipóteses e por quê.`:""}
 - Exame físico: nunca escreva "não feito", "não mencionado", "não visto", "não checado", "não avaliado", "sem informação" ou equivalentes. Use os achados de hoje (exame marcado e texto colado); para o que não veio hoje, mantenha a descrição do exame físico da evolução anterior, ajustando ao quadro atual, ou omita a linha.${split?` Na análise, liste em uma linha os itens do exame físico repetidos da evolução anterior, para o médico confirmar à beira leito.`:""}
 - Plano terapêutico e conduta em primeira pessoa: mantenho, ajusto, prescrevo, suspendo, inicio, solicito, aguardo, oriento.
-- Impressão clínica integrada à seção Evolução: mantenha todas as informações do dia e feche o texto da Evolução com a impressão do caso, escrita como continuação natural, sem título separado de "Impressão". Em 1 a 3 frases: síntese do caso, se está em melhora, piora ou estável e em que se baseia (clínica, sinais vitais e exames comparados com a admissão ou dias anteriores). Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
+- Impressão clínica integrada à seção Evolução: mantenha todas as informações do dia e feche o texto da Evolução com a impressão do caso, escrita como continuação natural, sem título separado de "Impressão". Em 1 a 3 frases: síntese do caso, se está em melhora, piora ou estável e em que se baseia (clínica, sinais vitais e exames). Só compare exame com valor anterior quando os dois valores estiverem escritos nos dados; sem valor anterior nos dados, não compare e não cite valor anterior. Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
 function buildEvoPrompt(p,raw,extra,split){
   const t=tpl("evolucao");
   return `Você recebe as instruções de trabalho de um médico e os dados de um paciente internado. Aplique as instruções.
@@ -1647,7 +1652,7 @@ function evolucaoTab(pid){
   const impText=h("div",{class:"outtext"+(imp.text?"":" placeholder"),id:"impText",text:imp.text||"Gerada logo após a evolução: resume o caso e indica melhora, piora ou estabilidade."});
   const impRedo=h("button",{type:"button",class:"btn quiet sm",id:"impRedo"},"Gerar impressão de novo");
   impBox.append(h("div",{class:"row"},h("b",{style:"font-family:var(--display);font-weight:600;font-size:1.05rem",text:"Impressão"}),impPill,h("span",{class:"spacer"}),h("label",{class:"row small muted",style:"gap:6px"},impCopy,"Repetir no fim da cópia")),h("div",{class:"small muted",text:"A impressão já vai integrada ao texto da Evolução. Este quadro mostra a tendência do dia (melhora, piora, estável) para o resumo e o histórico."}),impText,impExtra,h("div",{class:"row"},impRedo));
-  const outCard=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Para o prontuário"}),outTag,h("span",{class:"spacer"}),h("button",{type:"button",class:"btn sec sm",id:"evoCopy"},"Copiar")),h("div",{class:"card-b"},out,impBox,alertsBox));
+  const outCard=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Para o prontuário"}),outTag,h("span",{class:"spacer"}),h("button",{type:"button",class:"btn sec sm",id:"evoCopy"},"Copiar")),h("div",{class:"card-b"},numWarnEl(ev.numWarn),out,impBox,alertsBox,promptViewer(pid)));
   const adj=h("input",{class:"in",id:"adjust",placeholder:"Ajustar: ex.: evolução mais curta; tire a sugestão de teleparecer",autocomplete:"off"});
   const adjGo=h("button",{type:"button",class:"btn quiet",id:"adjGo"},"Ajustar");
   const adjBox=h("div",{class:"row",id:"adjBox",hidden:!ev.out},h("div",{style:"flex:1;min-width:200px"},adj),adjGo);
@@ -1682,6 +1687,7 @@ async function runEvolution(pid,adjust){
   if(running){ const s0=$("evoSt"); if(s0){s0.className="status";s0.textContent="Já estou gerando. Aguarde ou toque em Parar."} return }
   const sample=await sampleP; const st=$("evoSt");
   if(!sample){st.className="status err";st.textContent="Entre na sua conta para usar a IA.";return}
+  if(!adjust){ const e0=P.get(pid).evo||{}; if(!confirmOther([e0.raw,e0.ssvvRaw,e0.extra].join("\n"),pid,"o texto colado em Dados de hoje")){st.className="status err";st.textContent="Cancelado. Confira se está na ficha certa.";return} }
   ctl=new AbortController(); setBusy(true); st.className="status"; st.textContent="";
   try{
     let p=P.get(pid); const ev=p.evo||{}; const split=ev.split!==false;
@@ -1709,6 +1715,8 @@ async function runEvolution(pid,adjust){
     save(pid,{evo:{out:so.evo,alerts:so.alerts,at:Date.now()},evoHist:[...(P.get(pid).evoHist||[]).filter(x=>x.date!==todayISO()),{date:todayISO(),at:Date.now(),out:so.evo}].slice(-40)},0);
     lastTurns={pid,turns:[...(Array.isArray(input)?input:[{role:"user",content:input}]),{role:"assistant",content:r.text}]};
     renderOut(pid,r.text,split,true);
+    { const src=(Array.isArray(input)?input.map(m=>m.content).join("\n"):input)+"\n"+labsContext(P.get(pid),50); LAST_PROMPT[pid]=src;
+      const nw=unknownNums(so.evo,src); save(pid,{evo:{numWarn:nw}},0); if(onPage(pid)) showNumWarn(nw); }
     if(onPage(pid))$("adjBox").hidden=false;
     if(r.truncated&&onPage(pid)){st.className="status err";st.textContent="A resposta foi cortada no limite de tamanho. Revise o final."}
     if(!adjust&&P.get(pid).apoioAuto!==false){ apoioP=runApoioParallel(pid,sample); apoioP.catch(()=>{}); }
@@ -1772,6 +1780,79 @@ async function runImp(pid,sample){
   }
 }
 
+// ===================== conferência de números (evita valor inventado) =====================
+const NUM_RE=/\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?/g;
+function normNum(s){
+  s=String(s);
+  if(/^\d{1,3}(?:\.\d{3})+(?:,\d+)?$/.test(s)) s=s.replace(/\./g,"").replace(",",".");
+  else s=s.replace(",",".");
+  const n=parseFloat(s); return isFinite(n)?n:null;
+}
+function numSet(text){
+  const set=new Set(); String(text||"").replace(NUM_RE,m=>{const n=normNum(m); if(n!=null){set.add(+n.toFixed(4)); if(/^\d+\.\d{3}$/.test(m)) set.add(+(parseFloat(m)*1000).toFixed(4))} return m});
+  return set;
+}
+function hasNum(set,n){
+  const c=[n,n*1000,n/1000,n*10,n/10].map(x=>+x.toFixed(4));
+  return c.some(x=>set.has(x));
+}
+// números do texto gerado que não aparecem em nenhuma fonte (ignora datas, horários e inteiros pequenos)
+function unknownNums(out,src){
+  const set=numSet(src), bad=[];
+  String(out||"").split("\n").forEach(line=>{
+    let m; const re=new RegExp(NUM_RE.source,"g");
+    while((m=re.exec(line))){
+      const tok=m[0], i=m.index, before=line.slice(Math.max(0,i-2),i), after=line.slice(i+tok.length,i+tok.length+2);
+      if(/\/$/.test(before)||/^\//.test(after)) continue;                 // datas
+      if(/^\s?h/i.test(after)&&+tok<=24) continue;                         // horários, 12/12h
+      if(/[dD]$/.test(before)) continue;                                    // D5 de antibiótico
+      const n=normNum(tok); if(n==null) continue;
+      const dec=/[.,]\d/.test(tok)&&!/^\d{1,3}(?:\.\d{3})+$/.test(tok);
+      if(!dec&&n<32) continue;                                              // inteiros pequenos: idade, dias, doses
+      if(!dec&&n>=1900&&n<=2100) continue;                                  // anos
+      if(hasNum(set,n)) continue;
+      const ctx=line.slice(0,i).split(/[|;,:]|\.\s/).pop().trim().split(/\s+/).slice(-2).join(" ");
+      bad.push((ctx?ctx+" ":"")+tok);
+    }
+  });
+  return [...new Set(bad)].slice(0,12);
+}
+
+// procura no texto colado o nome de OUTRO paciente da lista (nome e sobrenome)
+function otherPatientIn(text,pid){
+  const T=" "+normName(text)+" "; if(T.length<6) return null;
+  for(const [id,q] of P.entries()){
+    if(id===pid||!q.nome) continue;
+    const parts=normName(q.nome).split(" ").filter(w=>w.length>2); if(parts.length<2) continue;
+    const full=normName(q.nome), fl=parts[0]+" "+parts[parts.length-1];
+    if(T.includes(" "+full+" ")||T.includes(" "+fl+" ")){
+      const mine=normName((P.get(pid)||{}).nome||""); if(mine&&T.includes(" "+mine+" ")&&mine.length>=full.length) continue;
+      return q.nome+(q.leito?" (leito "+q.leito+")":"");
+    }
+  }
+  return null;
+}
+function confirmOther(text,pid,what){
+  const o=otherPatientIn(text,pid); if(!o) return true;
+  return window.confirm("Atenção: "+what+" tem o nome de "+o+", outro paciente da sua lista.\n\nVocê está na ficha de "+((P.get(pid)||{}).nome||"-")+".\n\nToque em OK só se tiver certeza de que é deste paciente.");
+}
+const LAST_PROMPT={};
+function promptViewer(pid){
+  const pre=h("pre",{class:"outtext",style:"max-height:340px;overflow:auto;font-size:.8rem"});
+  const q=h("input",{class:"in",placeholder:"procurar no pedido (ex.: 1,57)",style:"max-width:220px"});
+  const info=h("div",{class:"small muted"});
+  const fill=()=>{const t=LAST_PROMPT[pid]||"Gere a evolução neste aparelho para ver o pedido."; const k=q.value.trim();
+    if(!k){pre.textContent=t;info.textContent="";return}
+    const alt=[k,k.replace(",","."),k.replace(".",",")]; const lines=t.split("\n").filter(l=>alt.some(a=>l.includes(a)));
+    info.textContent=lines.length?lines.length+" linha(s) do pedido com "+k+":":"\""+k+"\" não aparece em nada do que foi enviado à IA: a IA inventou esse valor.";
+    pre.textContent=lines.join("\n")};
+  q.oninput=fill;
+  const d=h("details",{class:"small",style:"margin-top:8px"},h("summary",{text:"Ver o que foi enviado à IA"}),h("div",{class:"row",style:"margin:6px 0"},q),info,pre);
+  d.addEventListener("toggle",()=>{if(d.open)fill()});
+  return d;
+}
+function numWarnEl(list){return h("div",{class:"alerts",id:"numWarn",hidden:!(list&&list.length),style:"border-color:var(--bad)"},h("h4",{style:"color:var(--bad)",text:"Confira estes números · não estão nos dados que você colou nem nos exames organizados"}),h("div",{class:"outtext",id:"numWarnT",text:(list||[]).join("  ·  ")}))}
+function showNumWarn(list){const b=$("numWarn");if(!b)return;b.hidden=!list.length;$("numWarnT").textContent=list.join("  ·  ")}
 // ===================== IMAGEM · PARECERES · ALTA =====================
 const ESPECIALIDADES=["Cardiologia","Cirurgia geral","Cirurgia vascular","Dermatologia","Endocrinologia","Gastroenterologia","Geriatria","Hematologia","Hepatologia","Infectologia","Nefrologia","Neurologia","Neurocirurgia","Nutrologia","Oftalmologia","Oncologia","Ortopedia","Otorrinolaringologia","Cuidados paliativos","Pneumologia","Proctologia","Psiquiatria","Reumatologia","Urologia","Ginecologia","Fisioterapia","Fonoaudiologia","Nutrição","Psicologia","Serviço social"];
 function espList(id){return h("datalist",{id},...ESPECIALIDADES.map(e=>h("option",{value:e})))}
@@ -1794,6 +1875,7 @@ async function streamDoc(o){
     const r=await sample(o.prompt,{cache:false,modelTier:o.tier||curTier(),onText:({text})=>{got=true;show(text)}});
     const s=show(r.text);
     o.st.className=r.truncated?"status err":"status"; o.st.textContent=r.truncated?"O texto foi cortado no limite de tamanho. Revise o final.":(o.ok||"Pronto e salvo.");
+    const nw=unknownNums(s.evo,o.prompt); if(nw.length){o.st.className="status err";o.st.textContent+=" Confira estes números, que não estão nos dados: "+nw.join(" · ")+"."}
     return {main:s.evo,alerts:s.alerts};
   }catch(e){
     if(o.out&&o.out.isConnected&&!(e&&e.text)){o.out.className="outtext placeholder";o.out.textContent=o.empty||""}
@@ -1864,9 +1946,11 @@ function imagemTab(pid){
   const asIs=h("button",{type:"button",class:"btn quiet"},"Salvar como está");
   const addItems=items=>{save(pid,{imgs:[...(P.get(pid).imgs||[]),...items]},0);rerenderTab(pid)};
   asIs.onclick=()=>{const t=raw.value.trim();if(!t){st.className="status err";st.textContent="Cole o laudo primeiro.";return}
+    if(!confirmOther(t,pid,"o laudo colado")){st.className="status err";st.textContent="Cancelado. Confira se está na ficha certa.";return}
     addItems([{id:uid36(),date:dmToISO(dt.value)||todayISO(),exame:"",texto:t,at:Date.now()}])};
   go.onclick=async()=>{
     const t=raw.value.trim(); if(!t){st.className="status err";st.textContent="Cole o laudo primeiro.";return}
+    if(!confirmOther(t,pid,"o laudo colado")){st.className="status err";st.textContent="Cancelado. Confira se está na ficha certa.";return}
     const sample=await sampleP; if(!sample){st.className="status err";st.textContent="Entre na sua conta para usar a IA.";return}
     go.disabled=asIs.disabled=true; st.className="status thinking"; st.textContent="Organizando o laudo";
     try{
@@ -1887,7 +1971,7 @@ ${t.slice(0,60000)}
     }catch(e){ if($("imgSt")){const s=$("imgSt");s.className="status err";s.textContent="Não consegui organizar. "+errMsg(e)+" Você pode usar Salvar como está."} }
     finally{ go.disabled=asIs.disabled=false }
   };
-  g.append(h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Laudo de imagem"})),h("div",{class:"card-b"},raw,
+  g.append(h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Laudo de imagem · "+(p.nome||"")})),h("div",{class:"card-b"},raw,
     h("div",{class:"row"},h("label",{class:"small muted",for:"imgDate"},"Data do exame (opcional)"),dt,h("span",{class:"small muted",text:"em branco, a data vem do laudo"})),
     h("div",{class:"row"},go,asIs),st,
     h("div",{class:"small muted",text:"Os exames de imagem entram na evolução, no resumo de alta, nos pareceres e nos encaminhamentos."}))));
