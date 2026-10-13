@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 13/10 (2)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 13/10 (3)</span></p>
 </div>
 
 <script>
@@ -1511,13 +1511,13 @@ function patientContext(p){
   const ef=efText(p);
   if(ef) b.push(`EXAME FÍSICO DO DIA, MARCADO PELO MÉDICO: use este conteúdo na seção de exame físico, mantendo todos os achados e só ajustando a forma.\n${ef}`);
   const lc=labsContext(p,3);
-  if(lc) b.push(`EXAMES LABORATORIAIS JÁ ORGANIZADOS (mais recente primeiro; use na seção de exames laboratoriais e compare a evolução):\n${lc}`);
+  if(lc) b.push(`EXAMES LABORATORIAIS JÁ ORGANIZADOS PELO MÉDICO NA ABA EXAMES (mais recente primeiro). OBRIGATÓRIO: na seção Exames Laboratoriais, escreva todas estas linhas, cada uma começando pela data (DD/MM), sem omitir nenhum exame nem alterar valores (só ajuste maiúsculas e minúsculas como as instruções do médico pedem), do mais recente para o mais antigo. Se o texto colado também trouxer exames, junte sem repetir datas; para a mesma data, valem estes:\n${lc}`);
   const todos=(p.todos||[]).filter(t=>!t.done);
   if(todos.length) b.push(`PENDÊNCIAS ABERTAS DO MÉDICO (inclua no plano terapêutico):\n${todos.map(t=>"- "+t.t).join("\n")}`);
   const metas=(p.metas||[]).filter(m=>!m.done);
   if(metas.length) b.push(`METAS PARA ALTA DEFINIDAS PELO MÉDICO (inclua na seção de metas para alta):\n${metas.map(m=>"- "+m.t+(m.prazo?" (prazo "+m.prazo+" dias)":"")).join("\n")}`);
   const ic=imgsContext(p,6);
-  if(ic) b.push(`EXAMES DE IMAGEM JÁ ORGANIZADOS (use na seção de exames de imagem, como estão):\n${ic}`);
+  if(ic) b.push(`EXAMES DE IMAGEM JÁ ORGANIZADOS PELO MÉDICO NA ABA IMAGEM. OBRIGATÓRIO: na seção Exames de Imagem, escreva todos, como estão, com a data. Se o texto colado também trouxer laudos de imagem, junte sem repetir:\n${ic}`);
   const pc=pareceresContext(p);
   if(pc) b.push(`PARECERES DE ESPECIALIDADES (respostas entram como avaliação da especialidade; os aguardando resposta entram no plano como pendência):\n${pc}`);
   if(p.imp&&p.imp.text) b.push(`IMPRESSÃO DA EVOLUÇÃO ANTERIOR (${fmtStamp(p.imp.at)}, só para contexto e comparação):\n${p.imp.text}`);
@@ -1545,7 +1545,15 @@ ${extra?`\nOBSERVAÇÃO DO MÉDICO PARA HOJE:\n${extra}\n`:""}
 TEXTO COLADO PELO MÉDICO:
 """
 ${raw||"(sem texto adicional; use os dados acima)"}
-"""`;
+"""${evoReminder(p)}`;
+}
+function evoReminder(p){
+  const r=[];
+  if(sortedLabs(p).length) r.push("a seção Exames Laboratoriais tem que trazer as linhas dos EXAMES LABORATORIAIS JÁ ORGANIZADOS, com data");
+  if((p.imgs||[]).length) r.push("a seção Exames de Imagem tem que trazer os EXAMES DE IMAGEM JÁ ORGANIZADOS, com data");
+  if((p.pareceres||[]).some(x=>x.resposta)) r.push("a seção Avaliação Especialidades tem que trazer as respostas dos PARECERES");
+  const ev=p.evo||{}; if(ev.ssvvLine) r.push("a seção de controles tem que trazer exatamente a linha de SINAIS VITAIS já resumida");
+  return r.length?"\n\nANTES DE RESPONDER, CONFIRA: "+r.join("; ")+".":"";
 }
 function impPrompt(p,evo,extra){
   const lc=labsContext(p,4);
