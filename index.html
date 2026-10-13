@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 13/10 (3)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 13/10 (4)</span></p>
 </div>
 
 <script>
@@ -1527,7 +1527,8 @@ const EVO_RULES=split=>`
 REGRAS DO MÉDICO PARA A EVOLUÇÃO (ele revisa e valida tudo antes de assinar; o objetivo é poupar tempo):
 - Hipóteses diagnósticas: ajuste sempre que a evolução, os exames, os pareceres ou uma inconsistência pedirem. Pode reordenar, refinar (ex.: ITU para pielonefrite aguda quando os dados sustentarem), marcar como resolvida ou em resolução e acrescentar hipótese nova quando houver dado que a sustente.${split?` Diga na análise, depois de ${MARK}, o que mudou na lista de hipóteses e por quê.`:""}
 - Exame físico: nunca escreva "não feito", "não mencionado", "não visto", "não checado", "não avaliado", "sem informação" ou equivalentes. Use os achados de hoje (exame marcado e texto colado); para o que não veio hoje, mantenha a descrição do exame físico da evolução anterior, ajustando ao quadro atual, ou omita a linha.${split?` Na análise, liste em uma linha os itens do exame físico repetidos da evolução anterior, para o médico confirmar à beira leito.`:""}
-- Plano terapêutico e conduta em primeira pessoa: mantenho, ajusto, prescrevo, suspendo, inicio, solicito, aguardo, oriento.`;
+- Plano terapêutico e conduta em primeira pessoa: mantenho, ajusto, prescrevo, suspendo, inicio, solicito, aguardo, oriento.
+- Impressão clínica integrada à seção Evolução: mantenha todas as informações do dia e feche o texto da Evolução com a impressão do caso, escrita como continuação natural, sem título separado de "Impressão". Em 1 a 3 frases: síntese do caso, se está em melhora, piora ou estável e em que se baseia (clínica, sinais vitais e exames comparados com a admissão ou dias anteriores). Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
 function buildEvoPrompt(p,raw,extra,split){
   const t=tpl("evolucao");
   return `Você recebe as instruções de trabalho de um médico e os dados de um paciente internado. Aplique as instruções.
@@ -1538,7 +1539,7 @@ ${t.text}
 """
 
 ${pageRules(t,split)}
-${EVO_RULES(split)}
+${EVO_RULES(split)}${(p.imp||{}).extra?`\nINFORMAÇÕES DO MÉDICO PARA A IMPRESSÃO (use na impressão integrada à Evolução):\n${p.imp.extra}\n`:""}
 
 ${patientContext(p)}
 ${extra?`\nOBSERVAÇÃO DO MÉDICO PARA HOJE:\n${extra}\n`:""}
@@ -1640,12 +1641,12 @@ function evolucaoTab(pid){
   const imp=p.imp||{};
   const impBox=h("div",{class:"impress "+((TREND[imp.trend]||[])[1]||""),id:"impBox"});
   const impPill=h("span",{id:"impPill"}); impPill.append(imp.text?trendPill(imp.trend):h("span",{class:"pill",text:"Ainda não gerada"}));
-  const impCopy=h("input",{type:"checkbox",id:"impCopy",checked:ev.impCopy!==false}); impCopy.onchange=()=>save(pid,{evo:{impCopy:impCopy.checked}});
+  const impCopy=h("input",{type:"checkbox",id:"impCopy",checked:ev.impCopy2===true}); impCopy.onchange=()=>save(pid,{evo:{impCopy2:impCopy.checked}}); if(0) impCopy.onchange=()=>save(pid,{evo:{impCopy:impCopy.checked}});
   const impExtra=h("textarea",{class:"in",id:"impExtra",rows:"2",placeholder:"Informações adicionais para a impressão (opcional): contexto da família, intercorrência, dúvida específica"});
   impExtra.value=(imp.extra||""); impExtra.oninput=()=>save(pid,{imp:{extra:impExtra.value}},1200);
   const impText=h("div",{class:"outtext"+(imp.text?"":" placeholder"),id:"impText",text:imp.text||"Gerada logo após a evolução: resume o caso e indica melhora, piora ou estabilidade."});
   const impRedo=h("button",{type:"button",class:"btn quiet sm",id:"impRedo"},"Gerar impressão de novo");
-  impBox.append(h("div",{class:"row"},h("b",{style:"font-family:var(--display);font-weight:600;font-size:1.05rem",text:"Impressão"}),impPill,h("span",{class:"spacer"}),h("label",{class:"row small muted",style:"gap:6px"},impCopy,"Incluir na cópia")),impText,impExtra,h("div",{class:"row"},impRedo));
+  impBox.append(h("div",{class:"row"},h("b",{style:"font-family:var(--display);font-weight:600;font-size:1.05rem",text:"Impressão"}),impPill,h("span",{class:"spacer"}),h("label",{class:"row small muted",style:"gap:6px"},impCopy,"Repetir no fim da cópia")),h("div",{class:"small muted",text:"A impressão já vai integrada ao texto da Evolução. Este quadro mostra a tendência do dia (melhora, piora, estável) para o resumo e o histórico."}),impText,impExtra,h("div",{class:"row"},impRedo));
   const outCard=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Para o prontuário"}),outTag,h("span",{class:"spacer"}),h("button",{type:"button",class:"btn sec sm",id:"evoCopy"},"Copiar")),h("div",{class:"card-b"},out,impBox,alertsBox));
   const adj=h("input",{class:"in",id:"adjust",placeholder:"Ajustar: ex.: evolução mais curta; tire a sugestão de teleparecer",autocomplete:"off"});
   const adjGo=h("button",{type:"button",class:"btn quiet",id:"adjGo"},"Ajustar");
