@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 13/10 (8)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 13/10 (9)</span></p>
 </div>
 
 <script>
@@ -1307,7 +1307,8 @@ function refFor(key,p,e){
   return L[2]==null?null:[L[2],L[3]];
 }
 const sortedLabs=p=>(p.labs||[]).slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
-function labLine(e){
+function labLine(e){ if(typeof labNice==="function") return labNice(e).join("\n"); return labLineOld(e) }
+function labLineOld(e){
   const main=LABKEYS.filter(k=>!GSA.has(k)&&e.v&&e.v[k]!=null).map(k=>k+" "+num(e.v[k]));
   const gsa=LABKEYS.filter(k=>GSA.has(k)&&e.v&&e.v[k]!=null).map(k=>k+" "+num(e.v[k]));
   let s=main.join(" | ");
@@ -1336,7 +1337,7 @@ function critCard(pid){
   const b=h("div",{class:"card-b"});
   if(!c.date) b.append(h("div",{class:"muted",text:"Sem exames registrados."}));
   else if(!c.list.length) b.append(h("div",{class:"muted",text:"Nenhum valor fora da faixa no último resultado."}));
-  else b.append(h("div",{class:"crits"},...c.list.map(x=>h("span",{class:"crit"},h("b",{text:x.k+" "+num(x.v)})," ("+x.dir+", ref. "+num(x.r[0])+"-"+num(x.r[1])+") "+x.arrow))));
+  else b.append(h("div",{class:"crits"},...c.list.map(x=>h("span",{class:"crit"},h("b",{text:(LAB_NICE[x.k]||x.k)+" "+num(x.v)})," ("+x.dir+", ref. "+num(x.r[0])+"-"+num(x.r[1])+") "+x.arrow))));
   b.append(h("div",{class:"small muted",text:"Faixas aproximadas para adultos. Confirme sempre com o laudo. PCR e lactato só são avaliados quando a unidade vem no laudo."}));
   card.append(b); return card;
 }
@@ -1456,7 +1457,7 @@ Regras:
 - TAP-Ativ é a atividade em %, TAP-Seg o tempo em segundos, INR a relação normatizada. TTPA em segundos (ou relação, se só houver relação).
 - Gasometria: só arterial (pH, pO2, pCO2, HCO3, SO2, Lactato). Ignore gasometria venosa, exceto o lactato se for o único.
 - "unidades": informe apenas para Lactato e PCR, quando presentes no laudo.
-- "outros": exames relevantes fora da lista (ex.: magnésio, glicemia, urina 1, culturas) em uma linha curta no formato "SIGLA VALOR | SIGLA VALOR"; deixe "" se não houver.
+- "outros": exames relevantes fora da lista (ex.: magnésio, cloro, glicemia, urina 1, culturas) em uma linha curta no formato "Mg 1,7 | Cl 102 | Glic 185": nome curto com só a primeira letra maiúscula, vírgula decimal, sem repetir exame que já está em "valores"; deixe "" se não houver.
 - Uma entrada por data de coleta, se o laudo trouxer mais de uma data. Data em DD/MM; null se não houver data.
 - Não invente valores. Exame ausente fica fora.
 
@@ -1473,7 +1474,7 @@ ${text}
       const v={}; for(const k of LABKEYS){const x=c.valores&&c.valores[k];const n=typeof x==="number"?x:typeof x==="string"?parseFloat(x.replace(",",".")):NaN;if(isFinite(n)){ if(hasNum(rawSet,n)) v[k]=n; else dropped.push(k+" "+num(n)) }}
       const u={}; ["Lactato","PCR"].forEach(k=>{if(c.unidades&&c.unidades[k])u[k]=String(c.unidades[k])});
       const date=(col.length===1&&override)||override&&!c.data?override:(dmToISO(c.data)||override||todayISO());
-      const outros=String(c.outros||"").trim(), ob=obs.value.trim();
+      const outros=String(c.outros||"").trim().replace(/(\d)\.(\d{1,2})(?!\d)/g,"$1,$2"), ob=obs.value.trim();
       if(!Object.keys(v).length&&!outros) return;
       const ex=labs.find(e=>e.date===date);
       if(ex){ const m={...ex,v:{...ex.v,...v},u:{...(ex.u||{}),...u},outros:[ex.outros,outros].filter(Boolean).join(" | "),obs:[ex.obs,ob].filter(Boolean).join("; ")}; labs=labs.map(e=>e.id===ex.id?m:e) }
@@ -1543,7 +1544,7 @@ REGRAS DO MÉDICO PARA A EVOLUÇÃO (ele revisa e valida tudo antes de assinar; 
 - Plano terapêutico e conduta em primeira pessoa: mantenho, ajusto, prescrevo, suspendo, inicio, solicito, aguardo, oriento.
 - Formato: coloque "| " antes de cada título de seção (ex.: "| Hipóteses Diagnósticas:", "| Exames Complementares:"), como no texto do médico.
 - Campos que o texto colado preenche (procedência, HPMA, culturas, especialidades) se mantêm; atualize, não apague.
-- Exames laboratoriais: uma linha por data ("- DD/MM: ..."), gasometria em linha própria logo abaixo, só a primeira letra maiúscula nos nomes (Leuc, Hb, Creat, Ur) e siglas como estão (PCR, INR, TAP, pH, pO2).
+- Exames laboratoriais: uma linha por data ("- DD/MM: ..."), gasometria em linha própria logo abaixo, só a primeira letra maiúscula nos nomes e siglas como estão (PCR, INR, TAP, pH, pO2). Use os MESMOS nomes em todas as datas, inclusive nos exames que vierem do texto colado: Leuc, Hb, Ht, Plq, Creat, Ur, Na, K, Ca, Mg, Cl, P, PCR, INR, TAP, TTPA, Glic, BT, BD, TGO, TGP, FA, GGT, Alb, Lactato (troque Cr por Creat, Leuco por Leuc, Plaq por Plq, RNI por INR, Glicose por Glic). Números sem ponto de milhar (12280, 212000) e com vírgula decimal (1,7).
 - Plano terapêutico: mantenha as linhas que o médico escreveu, cada uma na sua linha, apenas em primeira pessoa e com grafia corrigida; não junte em parágrafo. Condutas novas entram como tópicos.
 - Impressão clínica integrada à seção Evolução: mantenha todas as informações do dia e feche o texto da Evolução com a impressão do caso, escrita como continuação natural, sem título separado e sem escrever a palavra "Impressão:". Em 1 a 3 frases: síntese do caso, se está em melhora, piora ou estável e em que se baseia (clínica, sinais vitais e exames). Só compare exame com valor anterior quando os dois valores estiverem escritos nos dados; sem valor anterior nos dados, não compare e não cite valor anterior. Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
 function buildEvoPrompt(p,raw,extra,split){
