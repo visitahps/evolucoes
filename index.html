@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (5)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (6)</span></p>
 </div>
 
 <script>
@@ -763,7 +763,7 @@ const ERR={
   not_granted:"Este e-mail não está liberado para usar a IA. Confira o segredo ALLOWED_EMAILS no Supabase.",
   sampling_disabled:"O Claude não está disponível para esta conta.",
   rate_limited:"Muitos pedidos seguidos ou limite de uso atingido. Tente de novo em alguns minutos.",
-  session_expired:"Sua sessão expirou. Saia e entre de novo.",
+  session_expired:"Seu login venceu e não consegui renovar sozinho. Toque em Sair, no alto à direita, e entre de novo; o que você colou continua no campo.",
   no_function:"A função de IA não foi encontrada no Supabase. Confira o nome da função: claude.",
   no_key:"Falta a chave da Anthropic no Supabase (segredo ANTHROPIC_API_KEY).",
   no_credit:"A conta da Anthropic está sem créditos. Adicione créditos no console da Anthropic.",
@@ -852,6 +852,9 @@ async function callClaudeRaw(input,opts){
       body:(()=>{const b=JSON.stringify({messages:toMessages(input,imgs),tier:opts.modelTier||"default",max_tokens:opts.maxTokens||16000}); D.chars=b.length; return b})()});
     D.status=resp.status; mark("ia");
   }catch(e){ if(e&&e.name==="AbortError") throw {code:"cancelled",text}; throw {code:"upstream_error",detail:"sem conexão com o Supabase"+(e&&e.message?" · "+e.message:"")} }
+  if(resp.status===401&&!opts._renewed){
+    try{ const {data}=await SB.auth.refreshSession(); if(data&&data.session){ CUR_SESSION=data.session; return await callClaudeRaw(input,{...opts,_renewed:true}) } }catch(e){}
+  }
   if(!resp.ok){
     let t=""; try{t=await resp.text()}catch(e){}
     const code=resp.status===401?"session_expired":resp.status===403?"not_granted":resp.status===404?"no_function":(resp.status===429||resp.status===529)?"rate_limited":/missing_api_key/.test(t)?"no_key":/credit|billing/i.test(t)?"no_credit":/too long|too large/i.test(t)?"prompt_too_large":"upstream_error";
@@ -3074,7 +3077,7 @@ async function startSession(session){
     }).subscribe();
   }
 }
-document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&persist){ loadAll().then(refreshFromRemote).catch(()=>{}) } });
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&SB){ try{ SB.auth.getSession().then(r=>{const s=r&&r.data&&r.data.session; if(s&&s.expires_at&&s.expires_at*1000<Date.now()+120000) SB.auth.refreshSession().catch(()=>{})}).catch(()=>{}) }catch(e){} } if(!document.hidden&&persist){ loadAll().then(refreshFromRemote).catch(()=>{}) } });
 window.addEventListener("online",()=>{ if(persist){ [...pending.keys()].forEach(pid=>flush(pid)); loadAll().then(refreshFromRemote).catch(()=>{}) } });
 $("logoutBtn").onclick=async()=>{ for(const pid of [...pending.keys()]){ clearTimeout(timers[pid]); await flush(pid) } try{await SB.auth.signOut()}catch(e){} location.reload() };
 
@@ -3084,7 +3087,7 @@ $("logoutBtn").onclick=async()=>{ for(const pid of [...pending.keys()]){ clearTi
   const cfg=getCfg();
   if(!cfg){ gate="setup"; render(); return }
   if(!window.supabase||!window.supabase.createClient){ gate="login"; showBanner("Não consegui carregar o Supabase. Confira a internet e recarregue a página."); render(); return }
-  SB=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,lock:async(n,t,fn)=>await fn()}});
+  SB=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
   try{ SB.auth.onAuthStateChange((ev,s)=>{ CUR_SESSION=s||null }) }catch(e){}
   let session=null;
   try{ ({data:{session}}=await SB.auth.getSession()) }catch(e){}
