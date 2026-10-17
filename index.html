@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (7)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (8)</span></p>
 </div>
 
 <script>
@@ -1476,7 +1476,9 @@ Regras:
 - "unidades": informe apenas para Lactato e PCR, quando presentes no laudo.
 - "outros": TODOS os demais exames que aparecerem no laudo, sem exceção e sem escolher só os "relevantes". Exemplos (a lista não é limite): Mg, P, Cl, Glic, Ca iônico, Alb, Proteínas totais, FA, GGT, CK, CKMB, Troponina, BNP, NT-proBNP, D-dímero, Fibrinogênio, Ferritina, Ferro, Transferrina, B12, Ácido fólico, TSH, T4L, HbA1c, Colesterol, Triglicérides, Amônia, Procalcitonina, VHS, Reticulócitos, Ácido úrico, Osmolaridade, Urina 1 (só os achados, em um item: "Urina 1": "Leuco 96000 | Nitrito positivo"), culturas e antibiograma (resumo curto em texto), sorologias.
 - Em "outros": um item por exame, "exame" com nome curto e só a primeira letra maiúscula (siglas como estão: PCR, BNP, TSH, CK), "valor" como está no laudo, com vírgula decimal e sem unidade. Não repita exame que já está em "valores". Lista vazia [] se não houver.
-- Confira no fim: todo exame com resultado no laudo tem que estar em "valores" ou em "outros". Só fica de fora o diferencial do leucograma e os índices hematimétricos.
+- Confira no fim: todo exame com resultado no laudo tem que estar em "valores" ou em "outros".
+- Ficam de fora: índices hematimétricos (eritrócitos, VCM normal, HCM, CHCM, RDW, VPM), morfologia sem relevância, TFG/eGFR calculada pelo laboratório, CO2 total e valores de referência. Do diferencial do leucograma, só o que estiver alterado e importar: bastões a partir de 10%, mielócitos, metamielócitos, promielócitos ou blastos acima de 0 (e qualquer comentário de blastos ou células atípicas).
+- Sem unidades nos valores (exceto %), nome curto com só a primeira letra maiúscula (Glic, Cai, Mg, Cl, Alb, Bast), siglas consagradas em maiúsculo (PCR, CK, BNP, TSH, GGT, FA).
 - Uma entrada por data de coleta, se o laudo trouxer mais de uma data. Data em DD/MM; null se não houver data.
 - Não invente valores. Exame ausente fica fora.
 
@@ -1523,11 +1525,44 @@ function pageRules(t,split){
 - Conduta, plano terapêutico e orientações sempre em primeira pessoa, como o médico escreve: mantenho, ajusto, prescrevo, suspendo, inicio, solicito, aguardo, oriento, discuto.
 ${flagOf(t,"analise")?(split?`- Tudo que for análise crítica, sugestões, pendências, inconsistências, red flags ou alertas para o médico deve ficar fora do texto do prontuário: escreva no fim, depois de uma linha contendo apenas ${MARK}. Se não houver nada relevante, não escreva essa linha.`:`- Inclua a análise e as sugestões no próprio texto, como as instruções pedem.`):`- Não acrescente análise, sugestões nem comentários.`}`;
 }
+// ===================== limpeza dos "outros exames" (padrão do médico) =====================
+const OUT_NAME={"glicose":"Glic","glicemia":"Glic","cálcio iônico":"Cai","calcio ionico":"Cai","ca iônico":"Cai","ca ionico":"Cai","cálcio ionizado":"Cai","magnésio":"Mg","magnesio":"Mg","cloro":"Cl","cloreto":"Cl","fósforo":"P","fosforo":"P","albumina":"Alb","bastonetes":"Bast","bastões":"Bast","segmentados":"Seg","mielócitos":"Mielo","metamielócitos":"Metamielo","promielócitos":"Promielo","blastos":"Blastos","ácido úrico":"Ác úrico","acido urico":"Ác úrico","ferritina":"Ferritina","troponina":"Trop","procalcitonina":"PCT","fosfatase alcalina":"FA","gama gt":"GGT","gama-gt":"GGT","creatinofosfoquinase":"CK","cpk":"CK","hemoglobina glicada":"HbA1c","vitamina b12":"B12","urina 1":"Urina 1","urina tipo 1":"Urina 1","eas":"Urina 1"};
+const OUT_KEEPCAPS=new Set(["VCM","PCR","INR","TAP","TTPA","CK","CKMB","BNP","TSH","T4L","T3","GGT","FA","DHL","LDH","VHS","PCT","GSV","GSA","HbA1c","B12","BT","BD","BI","TGO","TGP","HIV","VDRL","HCV","HBsAg","PTH","PSA","CEA"]);
+const OUT_CANON={ph:"pH",po2:"pO2",pco2:"pCO2",hco3:"HCO3",so2:"SO2",sato2:"SatO2",sat:"Sat",lactato:"Lactato",be:"Be"};
+const OUT_ELEM={CL:"Cl",MG:"Mg",NA:"Na",CA:"Ca",FE:"Fe",ZN:"Zn",LI:"Li"};
+const DIFF_RE=/^(blastos|promiel[oó]citos|miel[oó]citos|metamiel[oó]citos|bastonetes|bast[oõ]es|segmentados|eosin[oó]filos|bas[oó]filos|linf[oó]citos|mon[oó]citos|neutr[oó]filos|linf[oó]citos at[ií]picos)$/i;
+function cleanOutros(str){
+  if(!str) return "";
+  const seen=new Set(), out=[];
+  String(str).split(/\s*\|\s*/).forEach(tok=>{
+    let t=tok.trim().replace(/^(hemograma|leucograma|eritrograma|bioqu[ií]mica|gasometria venosa|coagulograma)\s*:\s*/i,"");
+    if(!t) return;
+    if(/blasto/i.test(t)&&!/^blastos\s+0\b/i.test(t)&&!/^blastos\s/i.test(t)){ const m=t.match(/(~?\s*\d+(?:[.,]\d+)?\s*%)[^%]*blasto/i); out.push("Células sugestivas de blastos"+(m?" "+m[1].replace(/\s/g,""):"")); return }
+    if(/e?gfr|\btfg\b|ritr[oó]citos|^h\.?c\.?m\b|^chcm|^rdw|^vpm|co2 total|policromasia|macrocitose|anisocitose|poiquilocitose|hipocromia|^hem[aá]cias:?\s*\d|^\(/i.test(t)) return;
+    t=t.replace(/\(\s*[\d.,]+\s*\/\s*mm[³3]\s*\)/g,"").replace(/(\d)\s*(mg\/dL|g\/dL|mmol\/L|mEq\/L|U\/L|UI\/L|mUI\/L|µUI\/mL|uUI\/mL|fL|pg\/mL|pg|ng\/mL|ng\/dL|µg\/dL|ug\/dL|mL\/min\/1[,.]73\s*m²?|milh[õo]es\/mm[³3]|\/mm[³3]|mm\/h|mg\/L|ng\/L)(?![A-Za-z])\.?/gi,"$1").replace(/\s+%/g,"%").replace(/\s{2,}/g," ").trim();
+    const grp=t.match(/^([^:\d]{1,25}?(?:\s\d)?)\s*:\s*(.+)$/);
+    const m=grp?[t,grp[1],grp[2]]:t.match(/^(.+?)\s+([<>~]?\s*-?\d[\d.,]*%?.*)$/);
+    let name=m?m[1].trim():t, val=m?m[2].trim():"";
+    const key=name.toLowerCase().normalize("NFC");
+    if(DIFF_RE.test(name)){ const n=parseFloat(val.replace(",",".")); const nm=name.toLowerCase();
+      if(/bast/.test(nm)){ if(!(n>=10)) return } else if(/miel|blast/.test(nm)){ if(!(n>0)) return } else return; }
+    if(/^vcm$/i.test(name)){ const n=parseFloat(val.replace(",",".")); if(!(n<80||n>100)) return }
+    if(OUT_CANON[key]){ name=OUT_CANON[key]; const id0=name.toLowerCase(); val=val.replace(/(\d)\.(\d{1,2})(?!\d)/g,"$1,$2"); if(!seen.has(id0)){seen.add(id0); out.push(name+" "+val)} return }
+    name=OUT_NAME[key]||OUT_ELEM[name.toUpperCase()]&&name.length<=2&&OUT_ELEM[name.toUpperCase()]||name;
+    if(!OUT_KEEPCAPS.has(name.toUpperCase())&&!OUT_KEEPCAPS.has(name)&&name.length>1&&!/^[A-Z][a-z]/.test(name)) name=name.charAt(0).toUpperCase()+name.slice(1).toLowerCase();
+    if(OUT_KEEPCAPS.has(name.toUpperCase())&&name!=="HbA1c") name=name.toUpperCase();
+    val=val.replace(/(\d)\.(\d{1,2})(?!\d)/g,"$1,$2").replace(/(\d),0+(?!\d)/g,"$1").replace(/(\d,\d*?[1-9])0+(?!\d)/g,"$1");
+    const id=name.toLowerCase(); if(seen.has(id)) return; seen.add(id);
+    out.push(val?name+(grp?": ":" ")+val:name);
+  });
+  return out.join(" | ");
+}
+
 const LAB_NICE={LEUC:"Leuc",HB:"Hb",HT:"Ht",PLQ:"Plq",CREAT:"Creat",UR:"Ur"};
 function labNice(e){
   const it=k=>{const v=e.v[k]; if(k==="TAP-Ativ") return "TAP "+num(v)+"%"; if(k==="TAP-Seg") return "TAP "+num(v)+" seg"; const u=(e.u||{})[k]; return (LAB_NICE[k]||k)+" "+num(v)+(u&&k==="PCR"?" "+u:"")};
   const main=LABKEYS.filter(k=>!GSA.has(k)&&e.v&&e.v[k]!=null).map(it), gsa=LABKEYS.filter(k=>GSA.has(k)&&e.v&&e.v[k]!=null).map(it);
-  const out=[main.join(" | ")]; if(gsa.length) out.push("GSA: "+gsa.join(" | ")); if(e.outros) out.push(e.outros); if(e.obs) out.push("Obs.: "+e.obs);
+  const out=[main.join(" | ")]; if(gsa.length) out.push("GSA: "+gsa.join(" | ")); if(e.outros){const co=cleanOutros(e.outros); if(co) out.push(co)} if(e.obs) out.push("Obs.: "+e.obs);
   return out.filter(Boolean);
 }
 function labsContext(p,n){const l=sortedLabs(p).slice(-n).reverse();return l.length?l.map(e=>{const x=labNice(e);return "- "+fmtDM(e.date)+": "+x[0]+(x.length>1?"\n  "+x.slice(1).join("\n  "):"")}).join("\n"):""}
