@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 16/10 (1)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (3)</span></p>
 </div>
 
 <script>
@@ -929,8 +929,10 @@ async function flush(pid){
   if(writing[pid]){clearTimeout(timers[pid]);timers[pid]=setTimeout(()=>flush(pid),400);return}
   const patch=pending.get(pid); if(!patch) return; pending.delete(pid);
   const cur=P.get(pid); if(!cur) return;
-  const doc={...cur,updatedAt:Date.now()}; P.set(pid,doc);
   writing[pid]=true;
+  let doc={...cur,updatedAt:Date.now()};
+  try{ const {data,error}=await SB.from("patients").select("data").eq("id",pid).maybeSingle(); if(!error&&data&&data.data) doc={...deepMerge(data.data,patch),updatedAt:Date.now()}; }catch(e){}
+  { const more=pending.get(pid); P.set(pid,more?deepMerge(doc,more):doc); }
   try{ await upsertPatient(pid,doc); if($("banner").dataset.save){showBanner("");delete $("banner").dataset.save} }
   catch(e){ showBanner("Sem conexão para salvar. A alteração fica guardada e será enviada de novo em instantes."); $("banner").dataset.save="1"; pending.set(pid,deepMerge(patch,pending.get(pid)||{})); clearTimeout(timers[pid]); timers[pid]=setTimeout(()=>flush(pid),5000); }
   finally{ writing[pid]=false; if(pending.has(pid)){clearTimeout(timers[pid]);timers[pid]=setTimeout(()=>flush(pid),700)} }
@@ -1459,7 +1461,7 @@ async function runLabs(pid,raw,dt,obs,st,go){
   const prompt=`Leia o laudo laboratorial abaixo e extraia os valores.
 
 Responda apenas com JSON neste formato:
-{"coletas":[{"data":"DD/MM ou null","valores":{"CREAT":1.36,"K":4.2},"unidades":{"Lactato":"mmol/L","PCR":"mg/L"},"outros":"texto ou vazio"}]}
+{"coletas":[{"data":"DD/MM ou null","valores":{"CREAT":1.36,"K":4.2},"unidades":{"Lactato":"mmol/L","PCR":"mg/L"},"outros":[{"exame":"Mg","valor":"1,7"},{"exame":"Troponina","valor":"0,02"}]}]}
 
 Chaves permitidas em "valores", exatamente assim: ${LABKEYS.join(", ")}.
 
@@ -1467,9 +1469,11 @@ Regras:
 - Valores como número (ponto decimal), sem unidade. LEUC e PLQ em valor absoluto por mm³ (ex.: 12.280/mm³ vira 12280; 212 mil vira 212000).
 - Do hemograma, só LEUC, HB, HT e PLQ, sem diferencial.
 - TAP-Ativ é a atividade em %, TAP-Seg o tempo em segundos, INR a relação normatizada. TTPA em segundos (ou relação, se só houver relação).
-- Gasometria: só arterial (pH, pO2, pCO2, HCO3, SO2, Lactato). Ignore gasometria venosa, exceto o lactato se for o único.
+- Gasometria arterial vai em "valores" (pH, pO2, pCO2, HCO3, SO2, Lactato). Gasometria venosa vai em "outros", num item só: {"exame":"GSV","valor":"pH 7,41 | pCO2 40 | HCO3 24 | Lactato 1,8"}.
 - "unidades": informe apenas para Lactato e PCR, quando presentes no laudo.
-- "outros": exames relevantes fora da lista (ex.: magnésio, cloro, glicemia, urina 1, culturas) em uma linha curta no formato "Mg 1,7 | Cl 102 | Glic 185": nome curto com só a primeira letra maiúscula, vírgula decimal, sem repetir exame que já está em "valores"; deixe "" se não houver.
+- "outros": TODOS os demais exames que aparecerem no laudo, sem exceção e sem escolher só os "relevantes". Exemplos (a lista não é limite): Mg, P, Cl, Glic, Ca iônico, Alb, Proteínas totais, FA, GGT, CK, CKMB, Troponina, BNP, NT-proBNP, D-dímero, Fibrinogênio, Ferritina, Ferro, Transferrina, B12, Ácido fólico, TSH, T4L, HbA1c, Colesterol, Triglicérides, Amônia, Procalcitonina, VHS, Reticulócitos, Ácido úrico, Osmolaridade, Urina 1 (só os achados, em um item: "Urina 1": "Leuco 96000 | Nitrito positivo"), culturas e antibiograma (resumo curto em texto), sorologias.
+- Em "outros": um item por exame, "exame" com nome curto e só a primeira letra maiúscula (siglas como estão: PCR, BNP, TSH, CK), "valor" como está no laudo, com vírgula decimal e sem unidade. Não repita exame que já está em "valores". Lista vazia [] se não houver.
+- Confira no fim: todo exame com resultado no laudo tem que estar em "valores" ou em "outros". Só fica de fora o diferencial do leucograma e os índices hematimétricos.
 - Uma entrada por data de coleta, se o laudo trouxer mais de uma data. Data em DD/MM; null se não houver data.
 - Não invente valores. Exame ausente fica fora.
 
@@ -1486,7 +1490,8 @@ ${text}
       const v={}; for(const k of LABKEYS){const x=c.valores&&c.valores[k];const n=typeof x==="number"?x:typeof x==="string"?parseFloat(x.replace(",",".")):NaN;if(isFinite(n)){ if(hasNum(rawSet,n)) v[k]=n; else dropped.push(k+" "+num(n)) }}
       const u={}; ["Lactato","PCR"].forEach(k=>{if(c.unidades&&c.unidades[k])u[k]=String(c.unidades[k])});
       const date=(col.length===1&&override)||override&&!c.data?override:(dmToISO(c.data)||override||todayISO());
-      const outros=String(c.outros||"").trim().replace(/(\d)\.(\d{1,2})(?!\d)/g,"$1,$2"), ob=obs.value.trim();
+      const outArr=Array.isArray(c.outros)?c.outros.filter(x=>x&&x.exame&&String(x.valor||"").trim()).filter(x=>{ const ns=String(x.valor).match(/\d+(?:[.,]\d+)?/g)||[]; const ok=ns.every(t=>hasNum(rawSet,normNum(t))); if(!ok) dropped.push(x.exame+" "+x.valor); return ok }):null;
+      const outros=(outArr?outArr.map(x=>String(x.exame).trim()+(/[|]/.test(String(x.valor))?": ":" ")+String(x.valor).trim()).join(" | "):String(c.outros||"")).trim().replace(/(\d)\.(\d{1,2})(?!\d)/g,"$1,$2"), ob=obs.value.trim();
       if(!Object.keys(v).length&&!outros) return;
       const ex=labs.find(e=>e.date===date);
       if(ex){ const m={...ex,v:{...ex.v,...v},u:{...(ex.u||{}),...u},outros:[ex.outros,outros].filter(Boolean).join(" | "),obs:[ex.obs,ob].filter(Boolean).join("; ")}; labs=labs.map(e=>e.id===ex.id?m:e) }
@@ -1529,7 +1534,7 @@ function patientContext(p){
   b.push("DATA DE HOJE: "+fmtDMY(todayISO())+". Use para o DIH, para contar os dias de antibiótico (D0 é o dia de início; hoje é D + número de dias desde o D0) e para chamar de \"hoje\" só o que for de hoje: exame de outro dia é citado pela data (ex.: \"labs de 12/10\").");
   b.push("DADOS DO CADASTRO (o que não estiver aqui vem do texto colado; nunca apague do texto um dado só porque falta no cadastro):\n"+[p.idade?"Idade: "+p.idade+" anos":"",p.sexo==="F"?"Sexo: feminino":p.sexo==="M"?"Sexo: masculino":"",p.dataInternacao?"Data de internação: "+fmtDMY(p.dataInternacao)+(d!=null?" (DIH "+d+")":""):"",p.procedencia?"Procedência: "+p.procedencia:"",p.hd?"Hipótese diagnóstica principal: "+p.hd:""].filter(Boolean).join("\n"));
   const ev=p.evo||{};
-  if(ev.ssvvLine) b.push(`SINAIS VITAIS DAS ÚLTIMAS 24H, JÁ RESUMIDOS: copie exatamente esta linha na seção de controles (sinais vitais).\n${ev.ssvvLine}`);
+  if(ev.ssvvLine) b.push(`SINAIS VITAIS DAS ÚLTIMAS 24H, JÁ RESUMIDOS (para interpretar): na seção de controles escreva apenas a marcação [[CONTROLES]] sozinha numa linha; o site coloca a linha exata.\n${ev.ssvvLine}`);
   const devs=ev.devs||[];
   if(devs.length||ev.devOther) b.push(`DISPOSITIVOS MARCADOS PELO MÉDICO: use exatamente estes na seção de dispositivos, um por linha com hífen, mantendo detalhes que o texto colado trouxer (local, data de inserção). "Outros achados" entra como linha própria.\n${devs.length?"Marcados: "+devs.join(", "):""}${ev.devOther?"\nOutros achados: "+ev.devOther:""}`);
   const blt=blText(p);
@@ -1537,13 +1542,13 @@ function patientContext(p){
   const ef=efText(p);
   if(ef) b.push(`EXAME FÍSICO DO DIA, MARCADO PELO MÉDICO: use este conteúdo na seção de exame físico, mantendo todos os achados e só ajustando a forma.\n${ef}`);
   const lc=labsContext(p,3);
-  if(lc) b.push(`EXAMES LABORATORIAIS JÁ ORGANIZADOS PELO MÉDICO NA ABA EXAMES (mais recente primeiro). OBRIGATÓRIO: na seção Exames Laboratoriais, escreva todas estas linhas, cada uma começando pela data (DD/MM), sem omitir nenhum exame nem alterar valores (só ajuste maiúsculas e minúsculas como as instruções do médico pedem), do mais recente para o mais antigo. Se o texto colado também trouxer exames, junte sem repetir datas; para a mesma data, valem estes:\n${lc}`);
+  if(lc) b.push(`EXAMES LABORATORIAIS JÁ ORGANIZADOS PELO MÉDICO NA ABA EXAMES (mais recente primeiro; use para interpretar e comparar). OBRIGATÓRIO: na seção Exames Laboratoriais NÃO copie estas linhas: escreva apenas a marcação [[LABS]] sozinha numa linha, e o site coloca os valores exatos no lugar. Depois dessa linha, acrescente só exames do texto colado com datas que NÃO estão abaixo, no mesmo formato. Ao citar valores no texto da Evolução, use exatamente os daqui:\n${lc}`);
   const todos=(p.todos||[]).filter(t=>!t.done);
   if(todos.length) b.push(`PENDÊNCIAS ABERTAS DO MÉDICO (inclua no plano terapêutico):\n${todos.map(t=>"- "+t.t).join("\n")}`);
   const metas=(p.metas||[]).filter(m=>!m.done);
   if(metas.length) b.push(`METAS PARA ALTA DEFINIDAS PELO MÉDICO (inclua na seção de metas para alta):\n${metas.map(m=>"- "+m.t+(m.prazo?" (prazo "+m.prazo+" dias)":"")).join("\n")}`);
   const ic=imgsContext(p,6);
-  if(ic) b.push(`EXAMES DE IMAGEM JÁ ORGANIZADOS PELO MÉDICO NA ABA IMAGEM. OBRIGATÓRIO: na seção Exames de Imagem, escreva todos, como estão, com a data. Se o texto colado também trouxer laudos de imagem, junte sem repetir:\n${ic}`);
+  if(ic) b.push(`EXAMES DE IMAGEM JÁ ORGANIZADOS PELO MÉDICO NA ABA IMAGEM. OBRIGATÓRIO: na seção Exames de Imagem escreva apenas a marcação [[IMAGEM]] sozinha numa linha (o site coloca os laudos no lugar); depois dela, só laudos do texto colado que não estejam abaixo:\n${ic}`);
   const pc=pareceresContext(p);
   if(pc) b.push(`PARECERES DE ESPECIALIDADES (respostas entram como avaliação da especialidade; os aguardando resposta entram no plano como pendência):\n${pc}`);
   if(p.imp&&p.imp.text) b.push(`IMPRESSÃO DA EVOLUÇÃO ANTERIOR (${fmtStamp(p.imp.at)}, só para contexto e comparação):\n${p.imp.text}`);
@@ -1573,17 +1578,30 @@ ${EVO_RULES(split)}${(p.imp||{}).extra?`\nINFORMAÇÕES DO MÉDICO PARA A IMPRES
 
 ${patientContext(p)}
 ${extra?`\nOBSERVAÇÃO DO MÉDICO PARA HOJE:\n${extra}\n`:""}
-TEXTO COLADO PELO MÉDICO:
+TEXTO COLADO PELO MÉDICO (evolução anterior ou dados de base; o que for de dias anteriores é histórico):
 """
 ${raw||"(sem texto adicional; use os dados acima)"}
-"""${evoReminder(p)}`;
+"""${(ev0=>ev0.news&&ev0.news.trim()?`
+
+NOVIDADES DE HOJE, ESCRITAS PELO MÉDICO (prevalecem sobre o texto acima quando houver conflito; atualize hipóteses, evolução, exame físico, especialidades e plano com elas):
+"""
+${ev0.news.trim()}
+"""`:"")(p.evo||{})}${evoReminder(p)}`;
+}
+function fillSlots(text,p){
+  const ev=p.evo||{}, lc=labsContext(p,3), ic=imgsContext(p,6).split("\n").filter(Boolean).map(l=>"- "+l).join("\n");
+  return String(text)
+    .replace(/^[ \t-]*\[\[\s*LABS\s*\]\][ \t]*$/gm,lc||"").replace(/\[\[\s*LABS\s*\]\]/g,lc||"")
+    .replace(/^[ \t-]*\[\[\s*IMAGEM\s*\]\][ \t]*$/gm,ic||"").replace(/\[\[\s*IMAGEM\s*\]\]/g,ic||"")
+    .replace(/^[ \t-]*\[\[\s*CONTROLES\s*\]\][ \t]*$/gm,ev.ssvvLine||"").replace(/\[\[\s*CONTROLES\s*\]\]/g,ev.ssvvLine||"");
 }
 function evoReminder(p){
   const r=[];
-  if(sortedLabs(p).length) r.push("a seção Exames Laboratoriais tem que trazer as linhas dos EXAMES LABORATORIAIS JÁ ORGANIZADOS, com data");
-  if((p.imgs||[]).length) r.push("a seção Exames de Imagem tem que trazer os EXAMES DE IMAGEM JÁ ORGANIZADOS, com data");
+  if(sortedLabs(p).length) r.push("a seção Exames Laboratoriais tem a linha [[LABS]]");
+  if((p.imgs||[]).length) r.push("a seção Exames de Imagem tem a linha [[IMAGEM]]");
   if((p.pareceres||[]).some(x=>x.resposta)) r.push("a seção Avaliação Especialidades tem que trazer as respostas dos PARECERES");
-  const ev=p.evo||{}; if(ev.ssvvLine) r.push("a seção de controles tem que trazer exatamente a linha de SINAIS VITAIS já resumida");
+  const ev=p.evo||{}; if(ev.ssvvLine) r.push("a seção de controles tem a linha [[CONTROLES]]");
+  if((ev.news||"").trim()) r.push("tudo o que está em NOVIDADES DE HOJE entrou na evolução");
   return r.length?"\n\nANTES DE RESPONDER, CONFIRA: "+r.join("; ")+".":"";
 }
 function impPrompt(p,evo,extra){
@@ -1630,6 +1648,9 @@ function evolucaoTab(pid){
   const lb=h("div",{class:"card-b"});
   const raw=h("textarea",{class:"in",id:"evoRaw",rows:"10",placeholder:"Cole aqui a evolução, a HPMA, o que aconteceu hoje, condutas... do jeito que estiver."});
   raw.value=ev.raw||""; raw.oninput=()=>save(pid,{evo:{raw:raw.value}},1200);
+  raw.placeholder="Cole aqui a evolução de ontem (ou a HPMA, se for a primeira), do jeito que estiver.";
+  const news=h("textarea",{class:"in",id:"evoNews",rows:"4",placeholder:"Novidades de hoje: queixas, exame, intercorrências, condutas novas, pareceres, o que mudou. Pode escrever do seu jeito, em tópicos."});
+  news.value=ev.news||""; news.oninput=()=>save(pid,{evo:{news:news.value}},1200);
   const ssvv=h("textarea",{class:"in mono",id:"evoSsvv",rows:"4",spellcheck:"false",placeholder:"Selecione os registros na tela de monitorização, Ctrl+C, e cole aqui com Ctrl+V."});
   ssvv.value=ev.ssvvRaw||""; ssvv.oninput=()=>save(pid,{evo:{ssvvRaw:ssvv.value}},1200);
   const devBox=h("div",{class:"chips"});
@@ -1646,15 +1667,15 @@ function evolucaoTab(pid){
   const extra=h("textarea",{class:"in",id:"evoExtra",rows:"2",placeholder:"Observação só para hoje (opcional)"});
   extra.value=ev.extra||""; extra.oninput=()=>save(pid,{evo:{extra:extra.value}},1200);
   const optSplit=h("input",{type:"checkbox",id:"optSplit",checked:ev.split!==false}); optSplit.onchange=()=>save(pid,{evo:{split:optSplit.checked}});
-  const tier=h("select",{class:"in",id:"optTier"},h("option",{value:"quick"},"rápido (Haiku)"),h("option",{value:"default"},"detalhado (Sonnet, mais lento)"),h("option",{value:"complex"},"aprofundado (Opus, mais lento e caro)"));
-  try{tier.value=localStorage.getItem("evo.tier")||"quick"}catch(e){tier.value="quick"}
-  tier.onchange=()=>{try{localStorage.setItem("evo.tier",tier.value)}catch(e){}};
+  const tier=h("select",{class:"in",id:"optTier"},h("option",{value:"default"},"preciso (Sonnet, recomendado)"),h("option",{value:"quick"},"rápido (Haiku, erra mais)"),h("option",{value:"complex"},"máximo (Opus, mais lento)"));
+  try{tier.value=localStorage.getItem("evo.tier2")||"default"}catch(e){tier.value="default"}
+  tier.onchange=()=>{try{localStorage.setItem("evo.tier2",tier.value)}catch(e){}};
   const efNow=efText(p), nLabs=(p.labs||[]).length, nMetas=(p.metas||[]).filter(m=>!m.done).length;
   const ctxLine=h("div",{class:"small muted",text:"Entra junto: "+[efNow?"exame físico marcado":"exame físico (não marcado)",nLabs?nLabs+" exame(s) do histórico":"sem exames no histórico",nMetas?nMetas+" meta(s)":"sem metas",blText(p)?"beira leito de hoje":"beira leito (não preenchido)",p.imp?"impressão anterior":null].filter(Boolean).join(" · ")});
   const go=h("button",{type:"button",class:"btn",id:"evoGo"},"Reorganizar evolução");
   const stop=h("button",{type:"button",class:"btn quiet",id:"evoStop",hidden:true,onclick:()=>ctl&&ctl.abort()},"Parar");
   const st=h("div",{class:"status",id:"evoSt"});
-  lb.append(raw,
+  lb.append(raw,h("div",{class:"field"},h("label",{class:"label",for:"evoNews"},"Novidades de hoje (o que mudou desde ontem)"),news),
     h("div",{class:"field"},h("label",{class:"label",for:"evoSsvv"},"Sinais vitais · colar da tela de monitorização"),ssvv),
     h("fieldset",{class:"field"},h("legend",{class:"label"},"Dispositivos ",h("span",{class:"opt",text:"opcional"})),devBox,devOther),
     extra,
@@ -1713,7 +1734,10 @@ async function runEvolution(pid,adjust){
   if(running){ const s0=$("evoSt"); if(s0){s0.className="status";s0.textContent="Já estou gerando. Aguarde ou toque em Parar."} return }
   const sample=await sampleP; const st=$("evoSt");
   if(!sample){st.className="status err";st.textContent="Entre na sua conta para usar a IA.";return}
-  if(!adjust){ const e0=P.get(pid).evo||{}; if(!confirmOther([e0.raw,e0.ssvvRaw,e0.extra].join("\n"),pid,"o texto colado em Dados de hoje")){st.className="status err";st.textContent="Cancelado. Confira se está na ficha certa.";return} }
+  if(!adjust&&onPage(pid)){ const sync={}, ev1=P.get(pid).evo||{};
+    [["raw","evoRaw"],["news","evoNews"],["ssvvRaw","evoSsvv"],["extra","evoExtra"],["devOther","devOther"]].forEach(([k,id])=>{const e=$(id); if(e&&e.value!==(ev1[k]||"")) sync[k]=e.value});
+    if(Object.keys(sync).length) save(pid,{evo:sync},0); }
+  if(!adjust){ const e0=P.get(pid).evo||{}; if(!confirmOther([e0.raw,e0.news,e0.ssvvRaw,e0.extra].join("\n"),pid,"o texto colado em Dados de hoje")){st.className="status err";st.textContent="Cancelado. Confira se está na ficha certa.";return} }
   ctl=new AbortController(); setBusy(true); st.className="status"; st.textContent="";
   try{
     let p=P.get(pid); const ev=p.evo||{}; const split=ev.split!==false;
@@ -1735,8 +1759,9 @@ async function runEvolution(pid,adjust){
     else input=buildEvoPrompt(p,(p.evo||{}).raw||"",(p.evo||{}).extra||"",split);
     if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="Organizando";$("alertsBox").hidden=true;$("outTag").className="tag live";$("outTag").textContent="Escrevendo"}
     const T0=Date.now(); let gotText=false; const tick=setInterval(()=>{ if(gotText||!onPage(pid)) return; const o=$("evoOut"); if(o&&/^(Organizando|A IA não respondeu)/.test(o.textContent)) o.textContent=o.textContent.replace(/ · \d+ s$/,"")+" · "+Math.round((Date.now()-T0)/1000)+" s" },1000);
-    let r; try{ r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"quick",onText:({text})=>{gotText=true;renderOut(pid,text,split,false)},
+    let r; try{ r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"default",onText:({text})=>{gotText=true;renderOut(pid,fillSlots(text,P.get(pid)),split,false)},
       onRetry:(i,n)=>{if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}}}); } finally { clearInterval(tick) }
+    r={...r,text:fillSlots(r.text,P.get(pid))};
     const so=splitOut(r.text,split);
     save(pid,{evo:{out:so.evo,alerts:so.alerts,at:Date.now()},evoHist:[...(P.get(pid).evoHist||[]).filter(x=>x.date!==todayISO()),{date:todayISO(),at:Date.now(),out:so.evo}].slice(-40)},0);
     lastTurns={pid,turns:[...(Array.isArray(input)?input:[{role:"user",content:input}]),{role:"assistant",content:r.text}]};
@@ -1882,7 +1907,7 @@ function showNumWarn(list){const b=$("numWarn");if(!b)return;b.hidden=!list.leng
 // ===================== IMAGEM · PARECERES · ALTA =====================
 const ESPECIALIDADES=["Cardiologia","Cirurgia geral","Cirurgia vascular","Dermatologia","Endocrinologia","Gastroenterologia","Geriatria","Hematologia","Hepatologia","Infectologia","Nefrologia","Neurologia","Neurocirurgia","Nutrologia","Oftalmologia","Oncologia","Ortopedia","Otorrinolaringologia","Cuidados paliativos","Pneumologia","Proctologia","Psiquiatria","Reumatologia","Urologia","Ginecologia","Fisioterapia","Fonoaudiologia","Nutrição","Psicologia","Serviço social"];
 function espList(id){return h("datalist",{id},...ESPECIALIDADES.map(e=>h("option",{value:e})))}
-const curTier=()=>{try{return localStorage.getItem("evo.tier")||"quick"}catch(e){return "quick"}};
+const curTier=()=>{try{return localStorage.getItem("evo.tier2")||"default"}catch(e){return "default"}};
 const pName=p=>[p.leito?"Leito "+p.leito:"",p.nome].filter(Boolean).join(" · ");
 const busyOps={};
 
@@ -2837,7 +2862,7 @@ function refreshFromRemote(){
   if(gate||area!=="pac") return;
   if(!openPid){ const ae=document.activeElement; if(!(ae&&ae.closest&&ae.closest("#newForm"))&&!(censusPanel&&!censusPanel.hidden)) render(); }
   else if(!P.has(openPid)){ openPid=null; render(); }
-  else { refreshHead(openPid); const ae=document.activeElement; if((tab==="resumo"||tab==="exames"||tab==="apoio")&&!running&&!(ae&&ae.closest&&ae.closest("#tabBody")&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName))) rerenderTab(openPid); }
+  else { refreshHead(openPid); const ae=document.activeElement; if((tab==="resumo"||tab==="exames"||tab==="apoio"||tab==="evolucao"||tab==="imagem")&&!running&&!(ae&&ae.closest&&ae.closest("#tabBody")&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName))) rerenderTab(openPid); }
 }
 function applyRow(id,d){
   if(!d) return;
