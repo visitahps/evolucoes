@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (11)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (12)</span></p>
 </div>
 
 <script>
@@ -804,7 +804,15 @@ async function prepImage(blob){
     return {type:"base64",media_type:"image/jpeg",data:await blobToB64(out)};
   }catch(e){ throw {code:"image_rejected"} }
 }
-function toMessages(input,imgs){
+const CACHE_CUT="<<<FIM_DA_PARTE_FIXA>>>";
+function toMessages(input,imgs){ const out=toMessagesRaw(input,imgs); let used=false;
+  out.forEach(m=>{ if(used||typeof m.content!=="string") return; const i=m.content.indexOf(CACHE_CUT); if(i<0) return; used=true;
+    const a=m.content.slice(0,i), b=m.content.slice(i+CACHE_CUT.length);
+    m.content=[{type:"text",text:a,cache_control:{type:"ephemeral"}},{type:"text",text:b||"."}] });
+  out.forEach(m=>{ if(typeof m.content==="string") m.content=m.content.split(CACHE_CUT).join("") });
+  return out;
+}
+function toMessagesRaw(input,imgs){
   const src=typeof input==="string"?[{role:"user",content:input}]:input;
   const out=[]; src.forEach(m=>{const l=out[out.length-1]; if(l&&l.role===m.role) l.content+="\n\n"+m.content; else out.push({role:m.role,content:String(m.content)})});
   if(imgs&&imgs.length){const last=out[out.length-1]; last.content=[...imgs.map(source=>({type:"image",source})),{type:"text",text:last.content}]}
@@ -872,7 +880,7 @@ async function callClaudeRaw(input,opts){
         let d; try{d=JSON.parse(line.slice(5).trim())}catch(e){continue}
         if(d.type==="evo_info"){D.fn=d.fn;D.ajuste=d.ajuste;D.recusados=(d.recusados||[]).length;continue}
         if(d.type==="message_delta"&&d.delta){D.stop=d.delta.stop_reason; if(d.usage&&d.usage.output_tokens) D.tokens=d.usage.output_tokens}
-        if(d.type==="message_start"&&D.inicio===undefined){D.inicio=((Date.now()-D.at)/1000).toFixed(1); try{D.modelo=d.message.model}catch(e){}}
+        if(d.type==="message_start"&&D.inicio===undefined){D.inicio=((Date.now()-D.at)/1000).toFixed(1); try{D.modelo=d.message.model; const u=d.message.usage||{}; D.inTok=u.input_tokens; D.cacheR=u.cache_read_input_tokens; D.cacheW=u.cache_creation_input_tokens}catch(e){}}
         if(d.type==="content_block_delta"&&d.delta&&d.delta.type==="thinking_delta"&&D.pensando===undefined){D.pensando=((Date.now()-D.at)/1000).toFixed(1)}
         if(d.type==="content_block_delta"&&d.delta&&d.delta.type==="text_delta"){if(D.escrevendo===undefined)mark("escrevendo"); text+=d.delta.text; if(opts.onText){try{opts.onText({text,delta:d.delta.text})}catch(e){}}}
         else if(d.type==="message_delta"&&d.delta&&d.delta.stop_reason==="max_tokens") truncated=true;
@@ -1640,7 +1648,8 @@ ${t.text}
 """
 
 ${pageRules(t,split)}
-${EVO_RULES(split)}${(p.imp||{}).extra?`\nINFORMAÇÕES DO MÉDICO PARA A IMPRESSÃO (use na impressão integrada à Evolução):\n${p.imp.extra}\n`:""}
+${EVO_RULES(split)}
+${CACHE_CUT}${(p.imp||{}).extra?`\nINFORMAÇÕES DO MÉDICO PARA A IMPRESSÃO (use na impressão integrada à Evolução):\n${p.imp.extra}\n`:""}
 
 ${patientContext(p)}
 ${extra?`\nOBSERVAÇÃO DO MÉDICO PARA HOJE:\n${extra}\n`:""}
@@ -1653,6 +1662,14 @@ NOVIDADES DE HOJE, ESCRITAS PELO MÉDICO (prevalecem sobre o texto acima quando 
 """
 ${ev0.news.trim()}
 """`:"")(p.evo||{})}${evoReminder(p)}`;
+}
+function tidyText(t){
+  return String(t)
+    .replace(/\s*[—–]\s*/g," - ")            // travessão e meia-risca viram hífen
+    .replace(/\*\*(.+?)\*\*/g,"$1").replace(/(^|\s)\*(\S.*?\S)\*(?=\s|$)/g,"$1$2")   // negrito/itálico de markdown
+    .replace(/^\s*[•·]\s+/gm,"- ")            // marcadores que não são hífen
+    .replace(/^#{1,6}\s+(?=\S)/gm,(m,o,s)=>m)  // mantém # do modelo
+    .replace(/[ \t]+$/gm,"").replace(/\n{3,}/g,"\n\n");
 }
 function fillSlots(text,p){
   const ev=p.evo||{}, lc=labsContext(p,3), ic=imgsContext(p,6).split("\n").filter(Boolean).map(l=>"- "+l).join("\n");
@@ -1825,9 +1842,9 @@ async function runEvolution(pid,adjust){
     else input=buildEvoPrompt(p,(p.evo||{}).raw||"",(p.evo||{}).extra||"",split);
     if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="Organizando";$("alertsBox").hidden=true;$("outTag").className="tag live";$("outTag").textContent="Escrevendo"}
     const T0=Date.now(); let gotText=false; const tick=setInterval(()=>{ if(gotText||!onPage(pid)) return; const o=$("evoOut"); if(o&&/^(Organizando|A IA não respondeu)/.test(o.textContent)) o.textContent=o.textContent.replace(/ · \d+ s$/,"")+" · "+Math.round((Date.now()-T0)/1000)+" s" },1000);
-    let r; try{ r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"default",onText:({text})=>{gotText=true;renderOut(pid,fillSlots(text,P.get(pid)),split,false)},
+    let r; try{ r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"default",onText:({text})=>{gotText=true;renderOut(pid,tidyText(fillSlots(text,P.get(pid))),split,false)},
       onRetry:(i,n)=>{if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}}}); } finally { clearInterval(tick) }
-    r={...r,text:fillSlots(r.text,P.get(pid))};
+    r={...r,text:tidyText(fillSlots(r.text,P.get(pid)))};
     const so=splitOut(r.text,split);
     const sg=extractSugs(so.alerts), useSug=autoSug(); so.alerts=sg.rest;
     const outBase=so.evo; so.evo=insertIntoPlan(outBase,useSug?sg.list:[]);
@@ -1840,7 +1857,7 @@ async function runEvolution(pid,adjust){
       const nw=unknownNums(so.evo,src); save(pid,{evo:{numWarn:nw}},0); if(onPage(pid)) showNumWarn(nw); }
     if(onPage(pid))$("adjBox").hidden=false;
     if(r.truncated&&onPage(pid)){st.className="status err";st.textContent="A resposta foi cortada no limite de tamanho. Revise o final."}
-    if(!adjust&&P.get(pid).apoioAuto!==false){ apoioP=runApoioParallel(pid,sample); apoioP.catch(()=>{}); }
+    if(!adjust&&P.get(pid).apoioAuto===true){ apoioP=runApoioParallel(pid,sample); apoioP.catch(()=>{}); }
     // 3) impressão (rápida) e apoio clínico, em paralelo
     if(onPage(pid)&&!st.textContent){st.className="status thinking";st.textContent="Evolução pronta. Gerando impressão"+(apoioP?" e apoio clínico":"")}
     await runImp(pid,sample);
@@ -1863,7 +1880,7 @@ function diagLine(d){
   const hhmm=new Date(d.at).toTimeString().slice(0,8);
   return hhmm+" · "+({quick:"rápido",default:"detalhado",complex:"aprofundado"}[d.tier]||d.tier)+" · pedido "+Math.round(d.chars/1000)+" mil caracteres"
     +(d.status?" · HTTP "+d.status:"")+(d.ia?" · servidor "+d.ia+" s":"")+(d.inicio?" · IA iniciou "+d.inicio+" s":"")+(d.pensando?" · pensando "+d.pensando+" s":"")+(d.escrevendo?" · escreveu "+d.escrevendo+" s":"")
-    +(d.fim?" · fim "+d.fim+" s":"")+(d.cortada?" · CORTADA":"")+(d.tokens?" · "+d.tokens+" tokens":"")+(d.stop?" · fim="+d.stop:"")
+    +(d.fim?" · fim "+d.fim+" s":"")+(d.cortada?" · CORTADA":"")+(d.inTok!=null?" · entrada "+d.inTok+(d.cacheR?" + "+d.cacheR+" do cache":"")+(d.cacheW?" (gravou "+d.cacheW+" no cache)":""):"")+(d.tokens?" · saída "+d.tokens+" tokens":"")+(d.stop?" · fim="+d.stop:"")
     +(d.status===200?(d.fn?" · função "+d.fn+" ("+String(d.ajuste||"").replace(/[{}"]/g,"")+(d.recusados?", "+d.recusados+" ajuste(s) recusado(s)":"")+")":" · FUNÇÃO ANTIGA"):"")+(d.modelo?" · "+d.modelo:"")
     +(d.ok?" · ok":" · parou em: "+d.etapa);
 }
@@ -2031,7 +2048,7 @@ async function streamDoc(o){
   if(o.al) o.al.hidden=true;
   const T0=Date.now(); let got=false;
   const tick=setInterval(()=>{if(!got&&o.st.isConnected)o.st.textContent="Escrevendo · "+Math.round((Date.now()-T0)/1000)+" s"},1000);
-  const show=t=>{const s=splitOut(t,!!o.split); if(o.out&&o.out.isConnected){o.out.className="outtext";o.out.textContent=s.evo} if(o.al&&o.al.isConnected){o.al.hidden=!s.alerts;o.alt.textContent=s.alerts} return s};
+  const show=t=>{t=tidyText(t); const s=splitOut(t,!!o.split); if(o.out&&o.out.isConnected){o.out.className="outtext";o.out.textContent=s.evo} if(o.al&&o.al.isConnected){o.al.hidden=!s.alerts;o.alt.textContent=s.alerts} return s};
   try{
     const r=await sample(o.prompt,{cache:false,modelTier:o.tier||curTier(),onText:({text})=>{got=true;show(text)}});
     const s=show(r.text);
@@ -2924,7 +2941,7 @@ function apoioTab(pid){
   ac.append(ab); left.append(ac, todosCard(pid));
   // análise IA
   const card=h("div",{class:"card"});
-  const auto=h("input",{type:"checkbox",id:"apoioAuto",checked:p.apoioAuto!==false}); auto.onchange=()=>save(pid,{apoioAuto:auto.checked});
+  const auto=h("input",{type:"checkbox",id:"apoioAuto",checked:p.apoioAuto===true}); auto.onchange=()=>save(pid,{apoioAuto:auto.checked});
   const go=h("button",{type:"button",class:"btn",id:"apoioGo"},ap.at?"Analisar de novo":"Analisar caso agora");
   const st=h("div",{class:"status",id:"apoioSt"});
   card.append(h("div",{class:"card-h"},h("h3",{text:"Análise do caso"}),h("span",{class:"spacer"}),ap.at?h("span",{class:"small muted",text:fmtStamp(ap.at)}):null));
