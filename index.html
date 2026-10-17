@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (3)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (5)</span></p>
 </div>
 
 <script>
@@ -1051,7 +1051,7 @@ function newPatientForm(){
 function fld(label,id,input,cls){return h("div",{class:"field"+(cls?" "+cls:"")},h("label",{class:"label",for:id,text:label}),input)}
 
 // ===================== ficha do paciente =====================
-const TABS=[["beira","Beira leito"],["resumo","Resumo"],["evolucao","Evolução"],["exame","Exame físico"],["exames","Exames"],["imagem","Imagem"],["parecer","Pareceres"],["apoio","Apoio clínico"],["alta","Alta"]];
+const TABS=[["beira","Beira leito"],["resumo","Resumo"],["evolucao","Evolução"],["apoio","Apoio clínico"],["exame","Exame físico"],["exames","Exames"],["imagem","Imagem"],["parecer","Pareceres"],["alta","Alta"]];
 function patientView(pid){
   const p=P.get(pid);
   const wrap=h("div",{class:"stack"});
@@ -1173,7 +1173,7 @@ function metasCard(pid){
   card.append(b);
   return card;
 }
-function tabContent(pid){return tab==="imagem"?imagemTab(pid):tab==="parecer"?parecerTab(pid):tab==="alta"?altaTab(pid):tab==="apoio"?apoioTab(pid):tab==="beira"?beiraTab(pid):tab==="resumo"?resumoTab(pid):tab==="evolucao"?evolucaoTab(pid):tab==="exame"?exameTab(pid):examesTab(pid)}
+function tabContent(pid){return tab==="racio"?racioTab(pid):tab==="imagem"?imagemTab(pid):tab==="parecer"?parecerTab(pid):tab==="alta"?altaTab(pid):tab==="apoio"?apoioTab(pid):tab==="beira"?beiraTab(pid):tab==="resumo"?resumoTab(pid):tab==="evolucao"?evolucaoTab(pid):tab==="exame"?exameTab(pid):examesTab(pid)}
 function rerenderTab(pid){const b=$("tabBody");if(!b||openPid!==pid)return;b.textContent="";b.append(tabContent(pid))}
 
 // ===================== EXAME FÍSICO =====================
@@ -1563,6 +1563,15 @@ REGRAS DO MÉDICO PARA A EVOLUÇÃO (ele revisa e valida tudo antes de assinar; 
 - Campos que o texto colado preenche (procedência, HPMA, culturas, especialidades) se mantêm; atualize, não apague.
 - Exames laboratoriais: uma linha por data ("- DD/MM: ..."), gasometria em linha própria logo abaixo, só a primeira letra maiúscula nos nomes e siglas como estão (PCR, INR, TAP, pH, pO2). Use os MESMOS nomes em todas as datas, inclusive nos exames que vierem do texto colado: Leuc, Hb, Ht, Plq, Creat, Ur, Na, K, Ca, Mg, Cl, P, PCR, INR, TAP, TTPA, Glic, BT, BD, TGO, TGP, FA, GGT, Alb, Lactato (troque Cr por Creat, Leuco por Leuc, Plaq por Plq, RNI por INR, Glicose por Glic). Números sem ponto de milhar (12280, 212000) e com vírgula decimal (1,7).
 - Plano terapêutico: mantenha as linhas que o médico escreveu, cada uma na sua linha, apenas em primeira pessoa e com grafia corrigida; não junte em parágrafo. Condutas novas entram como tópicos.
+${split?`- Depois da linha ${MARK} (fica fora do prontuário), faça a análise crítica de um hospitalista sênior que revisa o caso com o colega: não seja complacente, aponte o que ele pode não ter pensado e seja específico para ESTE paciente (nada genérico que valeria para qualquer internado). Use só os blocos que tiverem conteúdo, nesta ordem, em tópicos curtos com hífen:
+  INCONSISTÊNCIAS: dados que se contradizem, erro de copiar e colar, hipótese sem dado que sustente.
+  CONDUTA, O QUE EU AJUSTARIA: escolha, dose, duração, descalonamento, ajuste renal ou hepático, interações, desprescrição, profilaxias, dispositivos; cada um com o dado que motiva e a diretriz ou escore (sociedade e ano só se tiver certeza).
+  DIAGNÓSTICO: diferenciais ainda não excluídos e vieses (ancoragem, fechamento prematuro, achado que o diagnóstico não explica).
+  INVESTIGAR: só o que mudaria a conduta; diga também o que não precisa pedir.
+  PONTOS CEGOS E RISCOS 24 A 72H: segurança (delirium, quedas, LPP, nutrição, TEV, glicemia, objetivos de cuidado, barreiras de alta) e gatilhos para escalonar.
+  PERGUNTAS PARA A BEIRA LEITO: 2 a 4 checagens objetivas para hoje.
+  SUGESTÕES PARA O PLANO: as condutas que você recomenda e que ainda não estão no plano, cada uma numa linha começando com "+ " e já escrita como linha do plano, em primeira pessoa (ex.: "+ Solicito ferritina, ferro sérico e reticulócitos para investigar queda de Hb"). No máximo 6, só com base nos dados. O site coloca essas linhas no plano e o médico decide se ficam.
+  Se a conduta estiver adequada, diga em uma linha e não invente problema.`:""}
 - Impressão clínica integrada à seção Evolução: mantenha todas as informações do dia e feche o texto da Evolução com a impressão do caso, escrita como continuação natural, sem título separado e sem escrever a palavra "Impressão:". Em 1 a 3 frases: síntese do caso, se está em melhora, piora ou estável e em que se baseia (clínica, sinais vitais e exames). Só compare exame com valor anterior quando os dois valores estiverem escritos nos dados; sem valor anterior nos dados, não compare e não cite valor anterior. Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
 function buildEvoPrompt(p,raw,extra,split){
   const t=tpl("evolucao");
@@ -1688,7 +1697,7 @@ function evolucaoTab(pid){
   const outTag=h("span",{class:"tag",id:"outTag",text:ev.out?"Salva "+fmtStamp(ev.at):"Ainda não gerada"});
   if(ev.out) outTag.className="tag done";
   const out=h("pre",{class:"outtext"+(ev.out?"":" placeholder"),id:"evoOut",text:ev.out||"A evolução organizada aparece aqui, já com controles, dispositivos, exame físico, exames e metas que você marcou."});
-  const alertsBox=h("div",{class:"alerts",id:"alertsBox",hidden:!ev.alerts},h("h4",{text:"Análise crítica e sugestões · não copiar"}),h("div",{class:"outtext",id:"alertsText",text:ev.alerts||""}));
+  const alertsBox=h("div",{class:"alerts",id:"alertsBox",hidden:!ev.alerts},h("h4",{text:"Análise crítica do caso · não vai na cópia"}),h("div",{class:"outtext",id:"alertsText",text:ev.alerts||""}));
   const imp=p.imp||{};
   const impBox=h("div",{class:"impress "+((TREND[imp.trend]||[])[1]||""),id:"impBox"});
   const impPill=h("span",{id:"impPill"}); impPill.append(imp.text?trendPill(imp.trend):h("span",{class:"pill",text:"Ainda não gerada"}));
@@ -1698,7 +1707,7 @@ function evolucaoTab(pid){
   const impText=h("div",{class:"outtext"+(imp.text?"":" placeholder"),id:"impText",text:imp.text||"Gerada logo após a evolução: resume o caso e indica melhora, piora ou estabilidade."});
   const impRedo=h("button",{type:"button",class:"btn quiet sm",id:"impRedo"},"Gerar impressão de novo");
   impBox.append(h("div",{class:"row"},h("b",{style:"font-family:var(--display);font-weight:600;font-size:1.05rem",text:"Impressão"}),impPill,h("span",{class:"spacer"}),h("label",{class:"row small muted",style:"gap:6px"},impCopy,"Repetir no fim da cópia")),h("div",{class:"small muted",text:"A impressão já vai integrada ao texto da Evolução. Este quadro mostra a tendência do dia (melhora, piora, estável) para o resumo e o histórico."}),impText,impExtra,h("div",{class:"row"},impRedo));
-  const outCard=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Para o prontuário"}),outTag,h("span",{class:"spacer"}),h("button",{type:"button",class:"btn sec sm",id:"evoCopy"},"Copiar")),h("div",{class:"card-b"},numWarnEl(ev.numWarn),out,impBox,alertsBox,promptViewer(pid)));
+  const outCard=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Para o prontuário"}),outTag,h("span",{class:"spacer"}),h("button",{type:"button",class:"btn sec sm",id:"evoCopy"},"Copiar")),h("div",{class:"card-b"},numWarnEl(ev.numWarn),out,sugCard(pid),impBox,alertsBox,promptViewer(pid)));
   const adj=h("input",{class:"in",id:"adjust",placeholder:"Ajustar: ex.: evolução mais curta; tire a sugestão de teleparecer",autocomplete:"off"});
   const adjGo=h("button",{type:"button",class:"btn quiet",id:"adjGo"},"Ajustar");
   const adjBox=h("div",{class:"row",id:"adjBox",hidden:!ev.out},h("div",{style:"flex:1;min-width:200px"},adj),adjGo);
@@ -1763,9 +1772,13 @@ async function runEvolution(pid,adjust){
       onRetry:(i,n)=>{if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}}}); } finally { clearInterval(tick) }
     r={...r,text:fillSlots(r.text,P.get(pid))};
     const so=splitOut(r.text,split);
+    const sg=extractSugs(so.alerts), useSug=autoSug(); so.alerts=sg.rest;
+    const outBase=so.evo; so.evo=insertIntoPlan(outBase,useSug?sg.list:[]);
+    save(pid,{evo:{outBase,sugs:sg.list.map(t=>({t,on:useSug}))}},0);
     save(pid,{evo:{out:so.evo,alerts:so.alerts,at:Date.now()},evoHist:[...(P.get(pid).evoHist||[]).filter(x=>x.date!==todayISO()),{date:todayISO(),at:Date.now(),out:so.evo}].slice(-40)},0);
     lastTurns={pid,turns:[...(Array.isArray(input)?input:[{role:"user",content:input}]),{role:"assistant",content:r.text}]};
-    renderOut(pid,r.text,split,true);
+    renderOut(pid,so.evo+(so.alerts?"\n"+MARK+"\n"+so.alerts:""),split,true);
+    if(onPage(pid)){const sb=$("sugBox");if(sb)sb.replaceWith(sugCard(pid))}
     { const src=(Array.isArray(input)?input.map(m=>m.content).join("\n"):input)+"\n"+labsContext(P.get(pid),50); LAST_PROMPT[pid]=src;
       const nw=unknownNums(so.evo,src); save(pid,{evo:{numWarn:nw}},0); if(onPage(pid)) showNumWarn(nw); }
     if(onPage(pid))$("adjBox").hidden=false;
@@ -1904,6 +1917,46 @@ function promptViewer(pid){
 }
 function numWarnEl(list){return h("div",{class:"alerts",id:"numWarn",hidden:!(list&&list.length),style:"border-color:var(--bad)"},h("h4",{style:"color:var(--bad)",text:"Confira estes números · não estão nos dados que você colou nem nos exames organizados"}),h("div",{class:"outtext",id:"numWarnT",text:(list||[]).join("  ·  ")}))}
 function showNumWarn(list){const b=$("numWarn");if(!b)return;b.hidden=!list.length;$("numWarnT").textContent=list.join("  ·  ")}
+// ===================== sugestões de conduta que entram no plano =====================
+const autoSug=()=>{try{return localStorage.getItem("evo.autosug")!=="0"}catch(e){return true}};
+function extractSugs(alerts){
+  const list=[], rest=[];
+  String(alerts||"").split("\n").forEach(l=>{
+    const m=l.match(/^\s*\+\s+(.+?)\s*$/);
+    if(m) list.push(m[1].replace(/^[-•]\s*/,""));
+    else if(!/^\s*SUGEST[ÕO]ES PARA O PLANO\s*:?\s*$/i.test(l)) rest.push(l);
+  });
+  return {list:[...new Set(list)].slice(0,10),rest:rest.join("\n").replace(/\n{3,}/g,"\n\n").trim()};
+}
+// coloca as linhas no fim da seção Plano Terapêutico (antes do próximo título)
+function insertIntoPlan(evo,lines){
+  if(!lines.length) return evo;
+  const L=String(evo).split("\n");
+  const pi=L.findIndex(l=>/^\s*\|?\s*#*\s*Plano( Terap[eê]utico)?\s*:?\s*$/i.test(l)||/^\s*\|?\s*Plano Terap[eê]utico\s*:/i.test(l));
+  const add=lines.map(t=>"- "+t);
+  if(pi<0) return String(evo).replace(/\s+$/,"")+"\n"+add.join("\n");
+  let j=pi+1;
+  while(j<L.length&&!/^\s*\|\s*\S/.test(L[j])&&!/^\s*(Metas para alta|An[aá]lise Cr[ií]tica)/i.test(L[j])) j++;
+  let k=j; while(k>pi+1&&!L[k-1].trim()) k--;
+  L.splice(k,0,...add);
+  return L.join("\n");
+}
+function sugCard(pid){
+  const ev=P.get(pid).evo||{}, list=ev.sugs||[];
+  const box=h("div",{class:"alerts",id:"sugBox",hidden:!list.length,style:"border-color:var(--accent)"});
+  if(!list.length) return box;
+  const apply=()=>{ const e=P.get(pid).evo||{}; const out=insertIntoPlan(e.outBase||e.out||"",(e.sugs||[]).filter(x=>x.on).map(x=>x.t)); save(pid,{evo:{out}},0); const o=$("evoOut"); if(o){o.className="outtext";o.textContent=out} };
+  box.append(h("h4",{style:"color:var(--accent)",text:"Sugestões de conduta · marcadas já estão no plano da evolução"}));
+  list.forEach((x,i)=>{
+    const c=h("input",{type:"checkbox",checked:!!x.on});
+    c.onchange=()=>{ const s=(P.get(pid).evo.sugs||[]).map((y,j)=>j===i?{...y,on:c.checked}:y); save(pid,{evo:{sugs:s}},0); apply() };
+    box.append(h("label",{class:"row",style:"gap:8px;align-items:flex-start;margin:4px 0"},c,h("span",{text:x.t})));
+  });
+  const auto=h("input",{type:"checkbox",checked:autoSug()}); auto.onchange=()=>{try{localStorage.setItem("evo.autosug",auto.checked?"1":"0")}catch(e){}};
+  box.append(h("label",{class:"row small muted",style:"gap:6px;margin-top:6px"},auto,"Nas próximas evoluções, já colocar as sugestões no plano"));
+  return box;
+}
+
 // ===================== IMAGEM · PARECERES · ALTA =====================
 const ESPECIALIDADES=["Cardiologia","Cirurgia geral","Cirurgia vascular","Dermatologia","Endocrinologia","Gastroenterologia","Geriatria","Hematologia","Hepatologia","Infectologia","Nefrologia","Neurologia","Neurocirurgia","Nutrologia","Oftalmologia","Oncologia","Ortopedia","Otorrinolaringologia","Cuidados paliativos","Pneumologia","Proctologia","Psiquiatria","Reumatologia","Urologia","Ginecologia","Fisioterapia","Fonoaudiologia","Nutrição","Psicologia","Serviço social"];
 function espList(id){return h("datalist",{id},...ESPECIALIDADES.map(e=>h("option",{value:e})))}
@@ -2182,6 +2235,137 @@ function encList(pid){
   });
   box.append(st);
   return box;
+}
+
+// ===================== RACIOCÍNIO CLÍNICO (discussão crítica + conversa sobre o caso) =====================
+const RACIO_PERSONA=`Você é um hospitalista sênior e preceptor de clínica médica, discutindo o caso com um colega experiente que vai decidir a conduta. Seu papel é ser o segundo par de olhos crítico: questionar, apontar o que pode estar passando despercebido e sugerir melhorias com base em evidência. Não seja complacente: se a conduta atual tiver um problema, diga com clareza e explique por quê. Se estiver tudo adequado, diga isso em uma linha, sem inventar problema.
+
+Regras:
+- Baseie cada afirmação nos dados do paciente e diga qual dado sustenta. Separe o que é dado do que é inferência sua.
+- Quando faltar um dado que importa para a decisão, diga explicitamente qual falta e como ele mudaria a conduta.
+- Recomendações apoiadas em evidência consolidada: diretrizes de sociedades (ex.: KDIGO, IDSA, Surviving Sepsis, ACCP/CHEST, ASH, ESC, AHA/ACC, ADA, GOLD, GINA, BTS, NICE, AGS Beers, SBC, SBPT, AMIB, SBN, SBD, SBI, ANCP), revisões sistemáticas e escores validados. Cite sociedade e ano só quando tiver certeza de que existe; nunca invente referência, número de recomendação, estudo ou valor. Prefira as diretrizes brasileiras quando equivalentes.
+- Considere vieses: ancoragem no diagnóstico de entrada, fechamento prematuro, diagnóstico que não explica todos os achados, efeito de medicamento como causa, cascata de prescrição.
+- Seja proporcional: idade, fragilidade, funcionalidade, prognóstico e objetivos de cuidado (inclusive paliativo). Evite excesso de exames e medicalização; diga também o que NÃO precisa ser feito.
+- Doses: confira função renal e hepática, interações e duplicidades com os dados disponíveis.
+- Nunca escreva valor de exame que não esteja nos dados.
+- Português do Brasil, de colega para colega, direto e objetivo, sem floreio e sem travessão (use hífen).
+- Você apoia o raciocínio; a decisão final é do médico assistente.`;
+
+function racioContext(p){
+  const ev=p.evo||{};
+  return [fullContext(p),
+    ev.news&&ev.news.trim()?"NOVIDADES DE HOJE ESCRITAS PELO MÉDICO:\n"+ev.news.trim():"",
+    ev.out?"EVOLUÇÃO ORGANIZADA MAIS RECENTE ("+fmtStamp(ev.at)+"):\n"+ev.out:"",
+    ev.alerts?"ANÁLISE CRÍTICA QUE SAIU JUNTO COM A EVOLUÇÃO:\n"+ev.alerts:"",
+    (p.imgs||[]).length?"EXAMES DE IMAGEM:\n"+imgsContext(p):"",
+    (p.pareceres||[]).length?"PARECERES DE ESPECIALIDADES:\n"+pareceresContext(p):"",
+    ((p.apoio||{}).itens||[]).length?"PONTOS JÁ LEVANTADOS NA ABA APOIO CLÍNICO:\n"+p.apoio.itens.filter(x=>!x.dismissed).map(x=>"- "+x.titulo+(x.acao?": "+x.acao:"")).join("\n"):"",
+    autoAlerts(p).length?"ALERTAS AUTOMÁTICOS DO SITE:\n"+autoAlerts(p).map(a=>"- "+a.t+" ("+a.why+")").join("\n"):""
+  ].filter(Boolean).join("\n\n");
+}
+const racioTierSel=id=>{const s=h("select",{class:"in",id,style:"max-width:240px"},h("option",{value:"default"},"preciso (Sonnet)"),h("option",{value:"complex"},"máximo (Opus, até 2 min)"));try{s.value=localStorage.getItem("evo.rtier")||"default"}catch(e){};s.onchange=()=>{try{localStorage.setItem("evo.rtier",s.value)}catch(e){}};return s};
+
+function racioTab(pid){
+  const p=P.get(pid), R=p.racio||{};
+  const g=h("div",{class:"grid2"});
+  // ---------- discussão crítica ----------
+  const focus=h("input",{class:"in",id:"racioFocus",placeholder:"Foco (opcional): ex.: antibiótico, queda de Hb, posso dar alta?, delirium",autocomplete:"off"});
+  focus.value=R.focus||""; focus.oninput=()=>save(pid,{racio:{focus:focus.value}},1200);
+  const tier=racioTierSel("racioTier");
+  const go=h("button",{type:"button",class:"btn"},R.text?"Discutir de novo":"Discutir o caso");
+  const oc=outCard("Discussão crítica do caso","racio",R.text,"Um colega sênior lê a ficha inteira (evoluções de todos os dias, exames, imagem, pareceres, beira leito, metas) e discute: síntese do problema, diferenciais e vieses, o que ajustaria na conduta, o que investigar (e o que não precisa), pontos cegos, riscos das próximas 24 a 72h e perguntas para a beira leito.",p,"Discussão do caso",R.at?h("span",{class:"small muted",text:fmtStamp(R.at)}):null);
+  go.onclick=async()=>{
+    const q=P.get(pid), f=focus.value.trim();
+    const prompt=`${RACIO_PERSONA}
+
+TAREFA: discuta o caso abaixo de forma crítica${f?`, com atenção especial a: ${f}`:""}. Use exatamente estes títulos, nesta ordem, cada um começando com "| ":
+| Síntese do problema
+1 a 2 frases: representação do problema (perfil, síndrome principal, tempo de doença e de internação, gravidade, trajetória).
+| Problemas ativos
+Do mais grave ao menos grave: status (melhora, piora, estável), dados que sustentam e o que está sendo feito.
+| Diagnóstico: o que mais pode ser
+Diferenciais relevantes ainda não considerados ou não excluídos, com o que favorece, o que fala contra e o dado que diferenciaria. Aponte vieses se houver.
+| Conduta: o que eu ajustaria
+Pontos concretos de melhoria (escolha, dose, duração, descalonamento, ajuste renal ou hepático, interações, desprescrição, profilaxias, dispositivos, metas), cada um com justificativa e diretriz ou escore. Se a conduta estiver adequada, diga.
+| Investigação que mudaria a conduta
+Só o que realmente mudaria decisão. Diga também o que não precisa pedir.
+| O que pode estar passando despercebido
+Segurança e pontos cegos: reconciliação, delirium, quedas, LPP, nutrição, funcionalidade, TEV, glicemia, dor, objetivos de cuidado, família, plano e barreiras de alta.
+| Riscos nas próximas 24 a 72h
+O que pode piorar, sinais de alerta e gatilho para escalonar (UTI, parecer, troca de antibiótico).
+| Perguntas para a beira leito
+3 a 5 checagens objetivas para hoje.
+| Referências
+Diretrizes e escores citados, com sociedade e ano, só os que você tem certeza que existem.
+
+Seja específico para ESTE paciente; evite recomendações genéricas que valeriam para qualquer internado.
+
+DADOS DO PACIENTE:
+${racioContext(q)}`;
+    const r=await streamDoc({btns:[go],out:oc.out,st:oc.st,tier:tier.value,ok:"Discussão pronta e salva.",empty:"",prompt});
+    if(r&&r.main) save(pid,{racio:{text:r.main,at:Date.now(),focus:f}},0);
+  };
+  g.append(h("div",{class:"stack"},
+    h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Discutir o caso"})),h("div",{class:"card-b"},
+      focus,h("div",{class:"row"},go,h("label",{class:"small muted",for:"racioTier"},"Raciocínio"),tier),
+      h("div",{class:"small muted",text:"Use depois de organizar a evolução do dia e os exames: quanto mais completa a ficha, melhor a discussão."}))),
+    oc.card));
+  g.append(chatCard(pid));
+  return g;
+}
+
+// ---------- conversa sobre o caso ----------
+const CHAT_SUG=["O que posso estar deixando passar neste caso?","Quais diferenciais não foram excluídos para o problema principal?","A antibioticoterapia está adequada (escolha, dose, duração, descalonamento)?","As doses estão ajustadas à função renal? Há interações ou algo para desprescrever?","O que falta para a alta segura? Quais as barreiras?","Este paciente tem critério de cuidados paliativos ou de rever objetivos de cuidado?"];
+function chatCard(pid){
+  const card=h("div",{class:"card",id:"chatCard"},h("div",{class:"card-h"},h("h3",{text:"Pergunte sobre o caso"}),h("span",{class:"spacer"}),
+    h("button",{type:"button",class:"btn quiet sm",onclick:e=>{const b=e.currentTarget;if(b.dataset.armed){save(pid,{chat:[]});const c=$("chatCard");if(c)c.replaceWith(chatCard(pid))}else{b.dataset.armed="1";b.textContent="confirmar";setTimeout(()=>{delete b.dataset.armed;b.textContent="Limpar conversa"},4000)}}},"Limpar conversa")));
+  const b=h("div",{class:"card-b"});
+  const log=h("div",{class:"stack",id:"chatLog",style:"gap:10px"});
+  const chat=P.get(pid).chat||[];
+  const bubble=(x)=>h("div",{class:"stack",style:"gap:6px"},
+    h("div",{style:"align-self:flex-end;max-width:92%;background:var(--accent-soft);color:var(--ink,inherit);border-radius:12px;padding:8px 12px;white-space:pre-wrap",text:x.q}),
+    h("pre",{class:"outtext",style:"margin:0",text:x.a||""}),
+    x.warn&&x.warn.length?h("div",{class:"small",style:"color:var(--bad)",text:"Confira estes números, que não estão nos dados: "+x.warn.join(" · ")}):null);
+  if(!chat.length) log.append(h("div",{class:"muted small",text:"Converse sobre este paciente como faria com um colega: dúvidas de conduta, diferenciais, doses, alta. A IA já tem a ficha inteira; a conversa fica salva aqui."}));
+  chat.forEach(x=>log.append(bubble(x)));
+  const sug=h("div",{class:"chips"},...CHAT_SUG.map(s=>h("button",{type:"button",class:"chip",onclick:()=>{q.value=s;q.focus()}},s)));
+  const q=h("textarea",{class:"in",id:"chatQ",rows:"3",placeholder:"Sua pergunta. Ex.: Hb caiu de 12,6 para 10,3 sem sangramento visível; o que investigar?"});
+  const tier=racioTierSel("chatTier");
+  const send=h("button",{type:"button",class:"btn"},"Perguntar");
+  const st=h("div",{class:"status"});
+  q.onkeydown=e=>{if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();send.click()}};
+  send.onclick=async()=>{
+    const question=q.value.trim(); if(!question){st.className="status err";st.textContent="Escreva a pergunta.";return}
+    const sample=await sampleP; if(!sample){st.className="status err";st.textContent="Entre na sua conta para usar a IA.";return}
+    const pp=P.get(pid), hist=(pp.chat||[]).slice(-8);
+    const ctx=`${RACIO_PERSONA}
+
+TAREFA: responda às perguntas do colega sobre o paciente abaixo. Responda primeiro à pergunta em si, de forma direta; depois, se houver, o que ele não perguntou mas deveria considerar. Se a pergunta partir de uma premissa errada pelos dados, diga. Tamanho proporcional à pergunta. Sem markdown de negrito ou títulos com #; use hífen para listas.
+
+DADOS DO PACIENTE:
+${racioContext(pp)}`;
+    const msgs=[]; hist.forEach((x,i)=>{msgs.push({role:"user",content:(i===0?ctx+"\n\nPERGUNTA DO COLEGA:\n":"")+x.q});msgs.push({role:"assistant",content:x.a||"(sem resposta)"})});
+    msgs.push({role:"user",content:(hist.length?"":ctx+"\n\nPERGUNTA DO COLEGA:\n")+question});
+    const item={q:question,a:"",at:Date.now()}; const bub=bubble(item); const pre=bub.querySelector("pre");
+    if(!chat.length&&log.firstChild&&log.firstChild.classList.contains("muted")) log.textContent="";
+    log.append(bub); pre.className="outtext placeholder thinking"; pre.textContent="Pensando";
+    send.disabled=true; q.value=""; st.className="status thinking"; st.textContent="Pensando";
+    const T0=Date.now(); const tick=setInterval(()=>{if(st.isConnected&&pre.classList.contains("thinking"))st.textContent="Pensando · "+Math.round((Date.now()-T0)/1000)+" s"},1000);
+    try{
+      const r=await sample(msgs,{cache:false,modelTier:tier.value,onText:({text})=>{pre.className="outtext";pre.textContent=text}});
+      item.a=r.text.trim(); pre.className="outtext"; pre.textContent=item.a;
+      item.warn=unknownNums(item.a,ctx+"\n"+msgs.filter(m=>m.role==="user").map(m=>m.content).join("\n"));
+      if(item.warn.length) bub.append(h("div",{class:"small",style:"color:var(--bad)",text:"Confira estes números, que não estão nos dados: "+item.warn.join(" · ")}));
+      save(pid,{chat:[...(P.get(pid).chat||[]),item].slice(-30)},0);
+      st.className="status"; st.textContent="";
+    }catch(e){
+      pre.className="outtext"; if(e&&e.text){pre.textContent=e.text} else pre.textContent="";
+      st.className="status err"; st.textContent="Não consegui responder. "+errMsg(e); q.value=question;
+    }finally{clearInterval(tick); send.disabled=false}
+  };
+  b.append(log,h("div",{class:"label",text:"Sugestões"}),sug,q,h("div",{class:"row"},send,h("label",{class:"small muted",for:"chatTier"},"Raciocínio"),tier,h("span",{class:"small muted",text:"Ctrl+Enter envia"})),st);
+  card.append(b);
+  return card;
 }
 
 // ===================== BEIRA LEITO =====================
