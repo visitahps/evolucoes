@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (8)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (10)</span></p>
 </div>
 
 <script>
@@ -1576,7 +1576,7 @@ function patientContext(p){
   const devs=ev.devs||[];
   if(devs.length||ev.devOther) b.push(`DISPOSITIVOS MARCADOS PELO MÉDICO: use exatamente estes na seção de dispositivos, um por linha com hífen, mantendo detalhes que o texto colado trouxer (local, data de inserção). "Outros achados" entra como linha própria.\n${devs.length?"Marcados: "+devs.join(", "):""}${ev.devOther?"\nOutros achados: "+ev.devOther:""}`);
   const blt=blText(p);
-  if(blt) b.push(`REGISTRO DE BEIRA LEITO DE HOJE, FEITO PELO MÉDICO (use na evolução do dia, no plano e nas metas quando couber; itens marcados como pendentes, revisar ou sem indicação devem aparecer no plano terapêutico):\n${blt}`);
+  if(blt) b.push(`REGISTRO DE BEIRA LEITO DE HOJE, FEITO PELO MÉDICO. É um checklist, não texto para copiar: use para montar o parágrafo de abertura da seção Evolução no modelo do médico (abaixo). Itens normais entram resumidos dentro desse parágrafo, nunca como frases soltas ("sono bom" não se escreve; sono só entra se ruim). Itens pendentes, a revisar ou sem indicação vão para o plano terapêutico ou para a análise:\n${blt}`);
   const ef=efText(p);
   if(ef) b.push(`EXAME FÍSICO DO DIA, MARCADO PELO MÉDICO: use este conteúdo na seção de exame físico, mantendo todos os achados e só ajustando a forma.\n${ef}`);
   const lc=labsContext(p,3);
@@ -1604,9 +1604,10 @@ REGRAS DO MÉDICO PARA A EVOLUÇÃO (ele revisa e valida tudo antes de assinar; 
 
 ESTILO (o mais importante): o texto tem que parecer escrito à mão por um hospitalista apressado no fim da visita, nunca por IA.
 - Copie o jeito de escrever do próprio médico no texto colado: as abreviações dele (BEG, AAA, MV+, RHA+, ATB, EV, VO, s/n, HD), o tamanho das frases, a pontuação. Frases curtas, diretas, estilo de prontuário, podendo ser telegráficas.
-- Tamanho: a evolução final deve ter tamanho parecido com a que foi colada, nunca bem maior. Seção Evolução com 3 a 6 linhas no caso estável; mais só se houve intercorrência.
+- Tamanho: a evolução final deve ter tamanho parecido com a que foi colada, nunca bem maior. Seção Evolução: o parágrafo de abertura mais 2 a 5 tópicos no caso estável; mais só se houve intercorrência.
 - Os tópicos com "*" e as listas das instruções do médico são o que considerar, não itens obrigatórios: escreva só o que tiver conteúdo real para este paciente hoje. Não preencha seção com frase genérica. Metas para alta: no máximo 3, específicas deste paciente (se o médico definiu metas, só as dele).
 - Proibido: "além disso", "vale ressaltar", "cabe destacar", "nesse contexto", "diante do exposto", "em suma", "de forma favorável", "mantém-se em acompanhamento", "segue em acompanhamento multidisciplinar", "quadro clínico estável do ponto de vista", "a ser reavaliado conforme evolução", adjetivos de enfeite e explicações do óbvio.
+- Nunca escreva no prontuário o que falta ou não foi encontrado (ex.: "labs de hoje não disponíveis", "sem ECO recente encontrado", "aguardo exames para confirmar"); isso vai para a análise ou para uma linha objetiva do plano ("- Solicito ECOTT").
 - Não repita a mesma informação em seções diferentes (ex.: exame já citado nos exames não precisa ser recontado na evolução; cite só o que mudou ou importa).
 ${split?`- Depois da linha ${MARK} (fica fora do prontuário), faça a análise crítica de um hospitalista sênior que revisa o caso com o colega: não seja complacente, aponte o que ele pode não ter pensado e seja específico para ESTE paciente (nada genérico que valeria para qualquer internado). Use só os blocos que tiverem conteúdo, nesta ordem, em tópicos curtos com hífen:
   INCONSISTÊNCIAS: dados que se contradizem, erro de copiar e colar, hipótese sem dado que sustente.
@@ -1618,7 +1619,17 @@ ${split?`- Depois da linha ${MARK} (fica fora do prontuário), faça a análise 
   SUGESTÕES PARA O PLANO: as condutas que você recomenda e que ainda não estão no plano, cada uma numa linha começando com "+ ", curta como linha de plano escrita à mão, verbo em primeira pessoa e sem justificativa (ex.: "+ Solicito ferritina e reticulócitos", "+ Ajusto enoxaparina para 20 mg/dia"). No máximo 4, só o que realmente muda o cuidado, com base nos dados. O site coloca essas linhas no plano e o médico decide se ficam.
   Se a conduta estiver adequada, diga em uma linha e não invente problema.
   A análise inteira em no máximo 8 tópicos curtos (1 a 2 linhas cada), sem introdução nem conclusão.`:""}
-- Impressão clínica integrada à seção Evolução: mantenha todas as informações do dia e feche o texto da Evolução com a impressão do caso, escrita como continuação natural, sem título separado e sem escrever a palavra "Impressão:". Em 1 ou 2 frases curtas, do jeito que o médico fecharia a evolução (ex.: "Em melhora clínica e laboratorial, afebril há 48h, Creat em queda."): se está em melhora, piora ou estável e em que se baseia. Só compare exame com valor anterior quando os dois valores estiverem escritos nos dados; sem valor anterior nos dados, não compare e não cite valor anterior. Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
+- SEÇÃO EVOLUÇÃO, NO MODELO DO PRÓPRIO MÉDICO. É assim que ele escreve:
+"""
+Encontro paciente em leito de enfermaria, hemodinamicamente estável, respirando espontaneamente em ar ambiente, lúcido, orientado em tempo e espaço, diurese e evacuação presentes e com boa aceitação alimentar. Sem queixas no momento. Checo controles, mantém estáveis e exames laboratoriais dentro dos valores de normalidade.
+- refere melhora parcial de dor abdominal, nega sintomas urinários;
+- estável clínica e hemodinamicamente;
+"""
+  Siga essa estrutura:
+  1) Parágrafo de abertura em primeira pessoa ("Encontro paciente...", "Checo controles..."), juntando numa frase corrida o que veio do beira leito e dos controles: acompanhante com nome e parentesco quando houver ("acompanhada do filho Carlos"), estado hemodinâmico, respiração e O2, consciência, diurese, evacuação, aceitação alimentar, mobilidade se relevante. Quando algo estiver alterado, escreva do mesmo jeito, só trocando o trecho (ex.: "sonolenta, porém despertável", "evacuação ausente há 3 dias", "em cateter nasal a 2 L/min"). Depois, queixas ("Sem queixas no momento." ou a queixa). Feche com "Checo controles," e o resumo dos controles e dos exames em uma frase (ex.: "Checo controles, afebril, PA estável, e exames com Creat em queda.").
+  2) Tópicos curtos com hífen, cada um terminando em ";", só com o que é específico do dia: queixas e achados, intercorrências, resposta ao tratamento, pareceres, exames que mudaram. Sem repetir o parágrafo.
+  3) O último tópico é a impressão do caso, curta, no mesmo tom (ex.: "- estável clínica e hemodinamicamente, em melhora do quadro infeccioso;", "- piora da função renal, mantém diurese, reavalio volemia;").
+- Impressão clínica: é o último tópico da seção Evolução (item 3 acima), sem a palavra "Impressão:" e sem parágrafo separado: se está em melhora, piora ou estável e em que se baseia, em poucas palavras. Só compare exame com valor anterior quando os dois valores estiverem escritos nos dados; sem valor anterior nos dados, não compare e não cite valor anterior. Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
 function buildEvoPrompt(p,raw,extra,split){
   const t=tpl("evolucao");
   return `Você recebe as instruções de trabalho de um médico e os dados de um paciente internado. Aplique as instruções.
@@ -2468,6 +2479,9 @@ const BL=[
   {k:"nota",l:"Anotação rápida",type:"textarea",ph:"o que mais você viu ou combinou à beira leito",opt:1}]}
 ];
 const BLITEMS=BL.flatMap(s=>s.items);
+// essenciais aparecem sempre; o resto fica em "Mais itens" (opcional, não conta como pendente)
+const BL_ESS=new Set(["acomp","acompNome","acompPar","consc","dor","dietaVia","aceit","diurese","evac","func","o2","devs","atb","tev","previsao","nota"]);
+const blIsEss=it=>BL_ESS.has(it.k);
 const blP=p=>((p.bl||{}).p)||{};
 const blPAt=p=>((p.bl||{}).pAt)||{};
 const blDays=p=>((p.bl||{}).days)||[];
@@ -2476,7 +2490,7 @@ const blPrev=p=>{const t=todayISO();const ds=blDays(p).filter(d=>d.date!==t);ret
 function blVals(p){const v={...blP(p),...blToday(p)};v.devs=((p.evo||{}).devs)||[];return v}
 const isEmpty=x=>x==null||x===""||(Array.isArray(x)&&!x.length);
 const blVisible=(it,v)=>!it.show||it.show(v);
-function blPending(p){const v=blVals(p);return BLITEMS.filter(it=>!it.opt&&blVisible(it,v)&&isEmpty(v[it.k]))}
+function blPending(p){const v=blVals(p);return BLITEMS.filter(it=>!it.opt&&blIsEss(it)&&blVisible(it,v)&&isEmpty(v[it.k]))}
 function blWarns(p){
   const v=blVals(p),out=[];
   BLITEMS.forEach(it=>{if(!blVisible(it,v))return;const x=v[it.k];
@@ -2524,7 +2538,12 @@ function beiraTab(pid){
   BL.forEach(sec=>{
     const card=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:sec.t})));
     const b=h("div",{class:"card-b bl-b"});
-    sec.items.forEach(it=>{ if(!blVisible(it,v)) return; b.append(blItem(pid,it,v,prev,pAt)) });
+    const ess=sec.items.filter(it=>blIsEss(it)&&blVisible(it,v)), ext=sec.items.filter(it=>!blIsEss(it)&&blVisible(it,v));
+    ess.forEach(it=>b.append(blItem(pid,it,v,prev,pAt)));
+    if(ext.length){ const filled=ext.some(it=>!isEmpty(v[it.k])), alert=ext.some(it=>it.warn&&!it.multi&&it.warn.includes(v[it.k]));
+      const det=h("details",{class:"bl-more"},h("summary",{class:"small muted",style:"cursor:pointer;padding:6px 0",text:"Mais itens ("+ext.length+")"+(alert?" · tem alerta":filled?" · preenchidos":"")}));
+      if(alert) det.open=true;
+      ext.forEach(it=>det.append(blItem(pid,it,v,prev,pAt))); b.append(det); }
     card.append(b); grid.append(card);
   });
   wrap.append(grid);
@@ -2538,7 +2557,7 @@ function beiraTab(pid){
 function blItem(pid,it,v,prev,pAt){
   const val=v[it.k];
   const isWarn=x=>(it.warn&&it.warn.includes(x))||(it.k==="dor"&&x>=4);
-  const box=h("div",{class:"bl-item"+(!it.opt&&isEmpty(val)?" pend":"")});
+  const box=h("div",{class:"bl-item"+(!it.opt&&blIsEss(it)&&isEmpty(val)?" pend":"")});
   const lab=h("div",{class:"bl-l"},h("span",{text:it.l}));
   if(it.p&&!isEmpty(val)&&pAt[it.k]) lab.append(h("span",{class:"small muted",text:" · desde "+fmtDM(pAt[it.k])}));
   if(!it.p&&prev&&!isEmpty(prev[it.k])&&isEmpty(val)&&it.type!=="devs"){
