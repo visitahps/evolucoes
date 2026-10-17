@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (6)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (7)</span></p>
 </div>
 
 <script>
@@ -1565,7 +1565,14 @@ REGRAS DO MÉDICO PARA A EVOLUÇÃO (ele revisa e valida tudo antes de assinar; 
 - Formato: coloque "| " antes de cada título de seção (ex.: "| Hipóteses Diagnósticas:", "| Exames Complementares:"), como no texto do médico.
 - Campos que o texto colado preenche (procedência, HPMA, culturas, especialidades) se mantêm; atualize, não apague.
 - Exames laboratoriais: uma linha por data ("- DD/MM: ..."), gasometria em linha própria logo abaixo, só a primeira letra maiúscula nos nomes e siglas como estão (PCR, INR, TAP, pH, pO2). Use os MESMOS nomes em todas as datas, inclusive nos exames que vierem do texto colado: Leuc, Hb, Ht, Plq, Creat, Ur, Na, K, Ca, Mg, Cl, P, PCR, INR, TAP, TTPA, Glic, BT, BD, TGO, TGP, FA, GGT, Alb, Lactato (troque Cr por Creat, Leuco por Leuc, Plaq por Plq, RNI por INR, Glicose por Glic). Números sem ponto de milhar (12280, 212000) e com vírgula decimal (1,7).
-- Plano terapêutico: mantenha as linhas que o médico escreveu, cada uma na sua linha, apenas em primeira pessoa e com grafia corrigida; não junte em parágrafo. Condutas novas entram como tópicos.
+- Plano terapêutico: mantenha as linhas que o médico escreveu, cada uma na sua linha, apenas em primeira pessoa e com grafia corrigida; não junte em parágrafo. Cada linha começa pelo verbo e cabe numa linha só (ex.: "- Mantenho ceftriaxona, D4", "- Solicito Hb amanhã"), sem justificativa: o porquê vai na análise. Não acrescente condutas de rotina que o médico não escreveu.
+
+ESTILO (o mais importante): o texto tem que parecer escrito à mão por um hospitalista apressado no fim da visita, nunca por IA.
+- Copie o jeito de escrever do próprio médico no texto colado: as abreviações dele (BEG, AAA, MV+, RHA+, ATB, EV, VO, s/n, HD), o tamanho das frases, a pontuação. Frases curtas, diretas, estilo de prontuário, podendo ser telegráficas.
+- Tamanho: a evolução final deve ter tamanho parecido com a que foi colada, nunca bem maior. Seção Evolução com 3 a 6 linhas no caso estável; mais só se houve intercorrência.
+- Os tópicos com "*" e as listas das instruções do médico são o que considerar, não itens obrigatórios: escreva só o que tiver conteúdo real para este paciente hoje. Não preencha seção com frase genérica. Metas para alta: no máximo 3, específicas deste paciente (se o médico definiu metas, só as dele).
+- Proibido: "além disso", "vale ressaltar", "cabe destacar", "nesse contexto", "diante do exposto", "em suma", "de forma favorável", "mantém-se em acompanhamento", "segue em acompanhamento multidisciplinar", "quadro clínico estável do ponto de vista", "a ser reavaliado conforme evolução", adjetivos de enfeite e explicações do óbvio.
+- Não repita a mesma informação em seções diferentes (ex.: exame já citado nos exames não precisa ser recontado na evolução; cite só o que mudou ou importa).
 ${split?`- Depois da linha ${MARK} (fica fora do prontuário), faça a análise crítica de um hospitalista sênior que revisa o caso com o colega: não seja complacente, aponte o que ele pode não ter pensado e seja específico para ESTE paciente (nada genérico que valeria para qualquer internado). Use só os blocos que tiverem conteúdo, nesta ordem, em tópicos curtos com hífen:
   INCONSISTÊNCIAS: dados que se contradizem, erro de copiar e colar, hipótese sem dado que sustente.
   CONDUTA, O QUE EU AJUSTARIA: escolha, dose, duração, descalonamento, ajuste renal ou hepático, interações, desprescrição, profilaxias, dispositivos; cada um com o dado que motiva e a diretriz ou escore (sociedade e ano só se tiver certeza).
@@ -1573,9 +1580,10 @@ ${split?`- Depois da linha ${MARK} (fica fora do prontuário), faça a análise 
   INVESTIGAR: só o que mudaria a conduta; diga também o que não precisa pedir.
   PONTOS CEGOS E RISCOS 24 A 72H: segurança (delirium, quedas, LPP, nutrição, TEV, glicemia, objetivos de cuidado, barreiras de alta) e gatilhos para escalonar.
   PERGUNTAS PARA A BEIRA LEITO: 2 a 4 checagens objetivas para hoje.
-  SUGESTÕES PARA O PLANO: as condutas que você recomenda e que ainda não estão no plano, cada uma numa linha começando com "+ " e já escrita como linha do plano, em primeira pessoa (ex.: "+ Solicito ferritina, ferro sérico e reticulócitos para investigar queda de Hb"). No máximo 6, só com base nos dados. O site coloca essas linhas no plano e o médico decide se ficam.
-  Se a conduta estiver adequada, diga em uma linha e não invente problema.`:""}
-- Impressão clínica integrada à seção Evolução: mantenha todas as informações do dia e feche o texto da Evolução com a impressão do caso, escrita como continuação natural, sem título separado e sem escrever a palavra "Impressão:". Em 1 a 3 frases: síntese do caso, se está em melhora, piora ou estável e em que se baseia (clínica, sinais vitais e exames). Só compare exame com valor anterior quando os dois valores estiverem escritos nos dados; sem valor anterior nos dados, não compare e não cite valor anterior. Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
+  SUGESTÕES PARA O PLANO: as condutas que você recomenda e que ainda não estão no plano, cada uma numa linha começando com "+ ", curta como linha de plano escrita à mão, verbo em primeira pessoa e sem justificativa (ex.: "+ Solicito ferritina e reticulócitos", "+ Ajusto enoxaparina para 20 mg/dia"). No máximo 4, só o que realmente muda o cuidado, com base nos dados. O site coloca essas linhas no plano e o médico decide se ficam.
+  Se a conduta estiver adequada, diga em uma linha e não invente problema.
+  A análise inteira em no máximo 8 tópicos curtos (1 a 2 linhas cada), sem introdução nem conclusão.`:""}
+- Impressão clínica integrada à seção Evolução: mantenha todas as informações do dia e feche o texto da Evolução com a impressão do caso, escrita como continuação natural, sem título separado e sem escrever a palavra "Impressão:". Em 1 ou 2 frases curtas, do jeito que o médico fecharia a evolução (ex.: "Em melhora clínica e laboratorial, afebril há 48h, Creat em queda."): se está em melhora, piora ou estável e em que se baseia. Só compare exame com valor anterior quando os dois valores estiverem escritos nos dados; sem valor anterior nos dados, não compare e não cite valor anterior. Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
 function buildEvoPrompt(p,raw,extra,split){
   const t=tpl("evolucao");
   return `Você recebe as instruções de trabalho de um médico e os dados de um paciente internado. Aplique as instruções.
