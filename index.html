@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. O texto clínico é processado pela IA (Claude, da Anthropic) pela sua chave. Revise sempre antes de colar no prontuário. <span class="small">· versão 13/10 (9)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 16/10 (1)</span></p>
 </div>
 
 <script>
@@ -950,6 +950,12 @@ function showBanner(m){const b=$("banner");b.textContent=m;b.hidden=!m}
 
 // ===================== estado de navegação =====================
 let area="pac", openPid=null, tab="beira", listFilter="ativo";
+const HOSPS=["Jardim Anália","Cruzeiro do Sul","Bosque da Saúde","Rosário","Paulo Sacramento"];
+const hospOf=p=>(p&&p.hospital)||"Jardim Anália";
+let hosp="Jardim Anália"; try{const x=localStorage.getItem("evo.hosp"); if(x&&(x==="Todos"||HOSPS.includes(x))) hosp=x}catch(e){}
+const inHosp=p=>hosp==="Todos"||hospOf(p)===hosp;
+const setHosp=x=>{hosp=x;try{localStorage.setItem("evo.hosp",x)}catch(e){};listFilter="ativo";render()};
+function hospSelect(id,val){const s=h("select",{class:"in",id},...HOSPS.map(x=>h("option",{value:x},x)));s.value=val&&HOSPS.includes(val)?val:"Jardim Anália";return s}
 $("navPac").onclick=()=>{area="pac";openPid=null;render()};
 $("navTools").onclick=()=>{area="tools";render()};
 
@@ -975,7 +981,10 @@ function metaLine(p){
   return bits.join(" · ");
 }
 function listView(){
-  const all=[...P.entries()].map(([id,p])=>({id,...p}));
+  const every=[...P.entries()].map(([id,p])=>({id,...p}));
+  const all=every.filter(inHosp);
+  const nH=x=>every.filter(p=>(p.status||"ativo")==="ativo"&&(x==="Todos"||hospOf(p)===x)).length;
+  const hrow=h("div",{class:"chips hosps",role:"tablist","aria-label":"Hospital"},...[...HOSPS,"Todos"].map(x=>h("button",{type:"button",class:"chip","aria-pressed":String(hosp===x),onclick:()=>setHosp(x)},x+" ("+nH(x)+")")));
   const counts={ativo:0,alta:0,obito:0,saiu:0}; all.forEach(p=>counts[p.status||"ativo"]=(counts[p.status||"ativo"]||0)+1);
   const list=all.filter(p=>(p.status||"ativo")===listFilter).sort(bedSort);
   const wrap=h("div",{class:"stack"});
@@ -985,7 +994,8 @@ function listView(){
     h("button",{type:"button",class:"btn sec",onclick:()=>{const c=censusPanelEl();c.hidden=!c.hidden}},"Importar censo"),
     h("button",{type:"button",class:"btn",onclick:()=>{$("newForm").hidden=!$("newForm").hidden;if(!$("newForm").hidden)$("nfNome").focus()}},"+ Novo paciente")
   );
-  wrap.append(filt, censusPanelEl(), newPatientForm());
+  wrap.append(hrow, filt, censusPanelEl(), newPatientForm());
+  { const c=censusPanelEl(), t=c.querySelector("h3"); if(t) t.textContent="Importar censo · "+(hosp==="Todos"?"escolha o hospital acima":hosp); const g=c.querySelector("#censusGo"); if(g) g.disabled=hosp==="Todos"; }
   if(listFilter==="ativo"&&list.length){
     const nv=list.filter(visitedToday).length, first=list.find(p=>!visitedToday(p));
     wrap.append(h("div",{class:"row"},h("span",{class:"small muted",text:"Visitados hoje: "+nv+" de "+list.length}),h("span",{class:"spacer"}),
@@ -1005,7 +1015,7 @@ function listView(){
       grid.append(h("button",{type:"button",class:"pcard",onclick:()=>{openPid=p.id;tab="beira";render();window.scrollTo(0,0)}},
         h("span",{class:"bed",text:p.leito||"-"}),
         h("span",{class:"pname",text:p.nome||"Sem nome"}),
-        h("span",{class:"pmeta",text:[metaLine(p),p.hd].filter(Boolean).join(" · ")||"Sem dados de cadastro"}),
+        h("span",{class:"pmeta",text:[hosp==="Todos"?hospOf(p):"",metaLine(p),p.hd].filter(Boolean).join(" · ")||"Sem dados de cadastro"}),
         h("span",{class:"row"},visitedToday(p)?h("span",{class:"pill est",text:"Visitado hoje"}):null,p.imp&&p.imp.text?trendPill(p.imp.trend):null,h("span",{class:"pmeta",text:"atualizado "+fmtStamp(p.updatedAt)})),
         (p.flags||[]).length?flags:null
       ));
@@ -1025,12 +1035,13 @@ function newPatientForm(){
     fld("Sexo","nfSexo",h("select",{class:"in",id:"nfSexo"},h("option",{value:""},"selecione"),h("option",{value:"F"},"Feminino"),h("option",{value:"M"},"Masculino"))),
     fld("Data de internação","nfData",h("input",{class:"in",id:"nfData",type:"date",value:todayISO()})),
     fld("Procedência","nfProc",h("input",{class:"in",id:"nfProc",placeholder:"ex.: PS",autocomplete:"off"})),
-    fld("Hipótese diagnóstica principal","nfHd",h("input",{class:"in",id:"nfHd",autocomplete:"off"}),"wide")
+    fld("Hipótese diagnóstica principal","nfHd",h("input",{class:"in",id:"nfHd",autocomplete:"off"}),"wide"),
+    fld("Hospital","nfHosp",hospSelect("nfHosp",hosp==="Todos"?"Jardim Anália":hosp))
   ));
   b.append(h("div",{class:"row"},h("button",{class:"btn",type:"submit"},"Cadastrar"),h("button",{class:"btn quiet",type:"button",onclick:()=>{f.hidden=true}},"Cancelar")));
   f.append(b);
   f.onsubmit=async e=>{e.preventDefault();
-    const pid=await createPatient({leito:$("nfLeito").value.trim(),nome:$("nfNome").value.trim().toUpperCase(),idade:$("nfIdade").value?+$("nfIdade").value:null,sexo:$("nfSexo").value||null,dataInternacao:$("nfData").value||null,procedencia:$("nfProc").value.trim(),hd:$("nfHd").value.trim()});
+    const pid=await createPatient({leito:$("nfLeito").value.trim(),nome:$("nfNome").value.trim().toUpperCase(),idade:$("nfIdade").value?+$("nfIdade").value:null,sexo:$("nfSexo").value||null,dataInternacao:$("nfData").value||null,procedencia:$("nfProc").value.trim(),hd:$("nfHd").value.trim(),hospital:$("nfHosp").value});
     if(pid){openPid=pid;tab="beira";render();window.scrollTo(0,0)}
   };
   return f;
@@ -1057,7 +1068,7 @@ function patientHead(pid){
   const box=h("div",{class:"phead"});
   box.append(h("div",{class:"row"},h("h2",{text:(p.leito||"-")+" · "+(p.nome||"Sem nome")}),
     p.status==="alta"?h("span",{class:"status-tag st-alta",text:"Alta "+fmtDM(p.statusDate)}):p.status==="obito"?h("span",{class:"status-tag st-obito",text:"Óbito "+fmtDM(p.statusDate)}):p.status==="saiu"?h("span",{class:"status-tag st-obito",text:"Saiu do censo "+fmtDM(p.statusDate)}):null));
-  box.append(h("div",{class:"pmeta",text:[metaLine(p),p.dataInternacao?"internado em "+fmtDMY(p.dataInternacao):"",p.procedencia?"procedência "+p.procedencia:""].filter(Boolean).join(" · ")}));
+  box.append(h("div",{class:"pmeta",text:[hospOf(p),metaLine(p),p.dataInternacao?"internado em "+fmtDMY(p.dataInternacao):"",p.procedencia?"procedência "+p.procedencia:""].filter(Boolean).join(" · ")}));
   box.append(h("div",{class:"small",text:p.hd?"HD: "+p.hd:"HD não registrada"}));
   // flags
   const fl=h("div",{class:"chips"});
@@ -1096,13 +1107,14 @@ function patientHead(pid){
     fld("Sexo","edSexo",h("select",{class:"in",id:"edSexo"},h("option",{value:""},"selecione"),h("option",{value:"F"},"Feminino"),h("option",{value:"M"},"Masculino"))),
     fld("Data de internação","edData",h("input",{class:"in",id:"edData",type:"date",value:p.dataInternacao||""})),
     fld("Procedência","edProc",h("input",{class:"in",id:"edProc",value:p.procedencia||"",autocomplete:"off"})),
-    fld("Hipótese diagnóstica principal","edHd",h("input",{class:"in",id:"edHd",value:p.hd||"",autocomplete:"off"}),"wide")
+    fld("Hipótese diagnóstica principal","edHd",h("input",{class:"in",id:"edHd",value:p.hd||"",autocomplete:"off"}),"wide"),
+    fld("Hospital","edHosp",hospSelect("edHosp",hospOf(p)))
   ),h("div",{class:"row"},h("button",{class:"btn",type:"submit"},"Salvar dados"),h("button",{class:"btn quiet",type:"button",onclick:()=>{ef.hidden=true}},"Fechar"))));
   ef.querySelector("#edSexo").value=p.sexo||"";
   ef.onsubmit=e=>{e.preventDefault();
     { const oldN=normName(P.get(pid).nome||""), newN=normName($("edNome").value);
       if(oldN&&newN&&oldN.split(" ")[0]!==newN.split(" ")[0]&&!window.confirm("Você está trocando o nome de "+P.get(pid).nome+" para "+$("edNome").value.toUpperCase()+".\n\nSe for OUTRO paciente no mesmo leito, toque em Cancelar e crie uma ficha nova (+ Novo paciente). Senão, os exames, evoluções e pareceres do paciente anterior ficam misturados nesta ficha.\n\nToque em OK só se for o mesmo paciente (correção de nome).")) return; }
-    save(pid,{leito:$("edLeito").value.trim(),nome:$("edNome").value.trim().toUpperCase(),idade:$("edIdade").value?+$("edIdade").value:null,sexo:$("edSexo").value||null,dataInternacao:$("edData").value||null,procedencia:$("edProc").value.trim(),hd:$("edHd").value.trim()});refreshHead(pid)};
+    save(pid,{leito:$("edLeito").value.trim(),nome:$("edNome").value.trim().toUpperCase(),idade:$("edIdade").value?+$("edIdade").value:null,sexo:$("edSexo").value||null,dataInternacao:$("edData").value||null,procedencia:$("edProc").value.trim(),hd:$("edHd").value.trim(),hospital:$("edHosp").value});refreshHead(pid)};
   box.append(ef);
   return box;
 }
@@ -2301,7 +2313,7 @@ function blItem(pid,it,v,prev,pAt){
   }
   box.append(opts); return box;
 }
-function activeSorted(){return [...P.entries()].map(([id,p])=>({id,...p})).filter(p=>(p.status||"ativo")==="ativo").sort(bedSort)}
+function activeSorted(){const cur=P.get(openPid);const H=hosp==="Todos"&&cur?hospOf(cur):hosp;return [...P.entries()].map(([id,p])=>({id,...p})).filter(p=>(p.status||"ativo")==="ativo"&&(H==="Todos"||hospOf(p)===H)).sort(bedSort)}
 function roundBar(pid){
   const list=activeSorted(), idx=list.findIndex(x=>x.id===pid);
   const prev=idx>0?list[idx-1]:null, next=idx>=0&&idx<list.length-1?list[idx+1]:null;
@@ -2396,6 +2408,7 @@ function censusPanelEl(){
   censusPanel=card; return card;
 }
 async function readCensus(file,paste,st,prev,go){
+  if(hosp==="Todos"){st.className="status err";st.textContent="Escolha o hospital nas abas acima antes de importar o censo.";return}
   const files=[...(file.files||[])], txt=paste.value.trim();
   if(!files.length&&!txt){st.className="status err";st.textContent="Escolha um arquivo ou cole o texto do censo.";return}
   const sample=await sampleP; if(!sample){st.className="status err";st.textContent="Entre na sua conta para usar a IA.";return}
@@ -2432,7 +2445,7 @@ async function readCensus(file,paste,st,prev,go){
   finally{ go.disabled=false; }
 }
 function buildCensusRows(list){
-  const existing=[...P.entries()].map(([id,p])=>({id,p,k:normName(p.nome)}));
+  const existing=[...P.entries()].filter(([id,p])=>hospOf(p)===hosp).map(([id,p])=>({id,p,k:normName(p.nome)}));
   censusRows=list.map(x=>{
     const k=normName(x.nome); const m=existing.find(e=>e.k===k);
     const leito=String(x.leito||"").trim();
@@ -2492,7 +2505,7 @@ async function applyCensus(btn){
       if(!p.convenio&&x.convenio) patch.convenio=String(x.convenio); if(!p.hd&&x.hd) patch.hd=String(x.hd);
       if(Object.keys(patch).length) save(r.match,patch,0);
     } else {
-      await createPatient({leito,nome:String(x.nome).toUpperCase().trim(),idade,sexo,dataInternacao:di,procedencia:"",convenio:String(x.convenio||""),hd:String(x.hd||""),medico:String(x.medico||"")});
+      await createPatient({hospital:hosp,leito,nome:String(x.nome).toUpperCase().trim(),idade,sexo,dataInternacao:di,procedencia:"",convenio:String(x.convenio||""),hd:String(x.hd||""),medico:String(x.medico||"")});
       n++;
     }
   }
@@ -2701,7 +2714,7 @@ const EXAMPLE_SSVV="Exemplo fictício\nData/Hora\tPA (mmHg)\tFC (bpm)\tFR (irpm)
 const EXAMPLE_LAB="Exemplo fictício - Coleta 10/10\nHemograma: Hb 11,9 g/dL  Ht 35,2%  Leucócitos 9.800/mm³ (seg 70% linf 22%)  Plaquetas 245.000/mm³\nCreatinina 1,6 mg/dL  Ureia 68 mg/dL  Sódio 136 mEq/L  Potássio 4,9 mEq/L\nPCR 48 mg/L\nGasometria arterial: pH 7,41 pO2 92 pCO2 38 HCO3 24 SatO2 97% Lactato 1,4 mmol/L";
 async function loadExamplePatient(){
   const d=new Date(); const iso=k=>{const x=new Date(d);x.setDate(x.getDate()-k);return x.getFullYear()+"-"+pad(x.getMonth()+1)+"-"+pad(x.getDate())};
-  const pid=await createPatient({leito:"999",nome:"EXEMPLO FICTÍCIO DA SILVA",idade:78,sexo:"F",dataInternacao:iso(3),procedencia:"PS",hd:"Pielonefrite aguda",
+  const pid=await createPatient({hospital:hosp==="Todos"?"Jardim Anália":hosp,leito:"999",nome:"EXEMPLO FICTÍCIO DA SILVA",idade:78,sexo:"F",dataInternacao:iso(3),procedencia:"PS",hd:"Pielonefrite aguda",
     flags:[{t:"Paciente de exemplo",c:"blu"}],
     metas:[{id:uid36(),t:"Completar ceftriaxona e ajustar pelo TSA",prazo:4,criada:iso(0),done:false}],
     labs:[{id:uid36(),date:iso(3),v:{LEUC:16400,HB:12.3,HT:36.8,PLQ:198000,CREAT:2.1,UR:82,Na:134,K:5.2,PCR:180,Lactato:2.6},u:{PCR:"mg/L",Lactato:"mmol/L"},outros:"Urina 1: Leuco >1.000.000 | Nitrito positivo",obs:""},
