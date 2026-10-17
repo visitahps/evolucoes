@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (10)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (11)</span></p>
 </div>
 
 <script>
@@ -1576,7 +1576,7 @@ function patientContext(p){
   const devs=ev.devs||[];
   if(devs.length||ev.devOther) b.push(`DISPOSITIVOS MARCADOS PELO MÉDICO: use exatamente estes na seção de dispositivos, um por linha com hífen, mantendo detalhes que o texto colado trouxer (local, data de inserção). "Outros achados" entra como linha própria.\n${devs.length?"Marcados: "+devs.join(", "):""}${ev.devOther?"\nOutros achados: "+ev.devOther:""}`);
   const blt=blText(p);
-  if(blt) b.push(`REGISTRO DE BEIRA LEITO DE HOJE, FEITO PELO MÉDICO. É um checklist, não texto para copiar: use para montar o parágrafo de abertura da seção Evolução no modelo do médico (abaixo). Itens normais entram resumidos dentro desse parágrafo, nunca como frases soltas ("sono bom" não se escreve; sono só entra se ruim). Itens pendentes, a revisar ou sem indicação vão para o plano terapêutico ou para a análise:\n${blt}`);
+  if(blt) b.push(`REGISTRO DE BEIRA LEITO DE HOJE, FEITO PELO MÉDICO. É um checklist, não texto para copiar: use para montar o parágrafo de abertura da seção Evolução no modelo do médico (abaixo). Os itens normais também entram, bem escritos e encadeados dentro desse parágrafo, nunca como frases soltas de checklist (ex.: "refere sono reparador", "nega náuseas ou vômitos", "deambulando com auxílio, já fora do leito"). Itens pendentes, a revisar ou sem indicação vão para o plano terapêutico ou para a análise:\n${blt}`);
   const ef=efText(p);
   if(ef) b.push(`EXAME FÍSICO DO DIA, MARCADO PELO MÉDICO: use este conteúdo na seção de exame físico, mantendo todos os achados e só ajustando a forma.\n${ef}`);
   const lc=labsContext(p,3);
@@ -1626,7 +1626,7 @@ Encontro paciente em leito de enfermaria, hemodinamicamente estável, respirando
 - estável clínica e hemodinamicamente;
 """
   Siga essa estrutura:
-  1) Parágrafo de abertura em primeira pessoa ("Encontro paciente...", "Checo controles..."), juntando numa frase corrida o que veio do beira leito e dos controles: acompanhante com nome e parentesco quando houver ("acompanhada do filho Carlos"), estado hemodinâmico, respiração e O2, consciência, diurese, evacuação, aceitação alimentar, mobilidade se relevante. Quando algo estiver alterado, escreva do mesmo jeito, só trocando o trecho (ex.: "sonolenta, porém despertável", "evacuação ausente há 3 dias", "em cateter nasal a 2 L/min"). Depois, queixas ("Sem queixas no momento." ou a queixa). Feche com "Checo controles," e o resumo dos controles e dos exames em uma frase (ex.: "Checo controles, afebril, PA estável, e exames com Creat em queda.").
+  1) Parágrafo de abertura em primeira pessoa ("Encontro paciente...", "Checo controles..."), juntando em texto corrido e bem encadeado tudo o que veio do beira leito e dos controles, inclusive o que está normal: acompanhante com nome e parentesco quando houver ("acompanhada do filho Carlos"), estado hemodinâmico, respiração e O2, consciência, sono ("refere sono reparador"), dor, náuseas, diurese, evacuação, aceitação alimentar e mobilidade. Escreva como um médico escreveria, não como lista: "Sono bom." sozinho não; "refere sono reparador e nega dor" sim. Quando algo estiver alterado, escreva do mesmo jeito, só trocando o trecho (ex.: "sonolenta, porém despertável", "evacuação ausente há 3 dias", "em cateter nasal a 2 L/min"). Depois, queixas ("Sem queixas no momento." ou a queixa). Feche com "Checo controles," e o resumo dos controles e dos exames em uma frase (ex.: "Checo controles, afebril, PA estável, e exames com Creat em queda.").
   2) Tópicos curtos com hífen, cada um terminando em ";", só com o que é específico do dia: queixas e achados, intercorrências, resposta ao tratamento, pareceres, exames que mudaram. Sem repetir o parágrafo.
   3) O último tópico é a impressão do caso, curta, no mesmo tom (ex.: "- estável clínica e hemodinamicamente, em melhora do quadro infeccioso;", "- piora da função renal, mantém diurese, reavalio volemia;").
 - Impressão clínica: é o último tópico da seção Evolução (item 3 acima), sem a palavra "Impressão:" e sem parágrafo separado: se está em melhora, piora ou estável e em que se baseia, em poucas palavras. Só compare exame com valor anterior quando os dois valores estiverem escritos nos dados; sem valor anterior nos dados, não compare e não cite valor anterior. Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
