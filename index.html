@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 17/10 (12)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 18/10 (1)</span></p>
 </div>
 
 <script>
@@ -748,7 +748,7 @@ function daysSince(iso){if(!iso)return null;const a=new Date(iso+"T00:00:00"),b=
 const num=v=>(typeof v==="number"&&isFinite(v))?v.toLocaleString("pt-BR",{maximumFractionDigits:2,useGrouping:false}):String(v);
 function deepMerge(a,b){const o=Array.isArray(a)?a.slice():{...(a||{})};for(const[k,v]of Object.entries(b||{})){o[k]=(v&&typeof v==="object"&&!Array.isArray(v)&&a&&typeof a[k]==="object"&&!Array.isArray(a[k]))?deepMerge(a[k],v):v}return o}
 const clone=o=>JSON.parse(JSON.stringify(o));
-function copyText(txt,statusEl,ok){
+function copyText(txt,statusEl,ok){ txt=tidyText(txt);
   const done=m=>{if(statusEl){statusEl.className="status";statusEl.textContent=m}};
   if(navigator.clipboard&&navigator.clipboard.writeText){
     navigator.clipboard.writeText(txt).then(()=>done(ok||"Copiado."),()=>done("Não consegui copiar. Selecione o texto e copie pelo aparelho."));
@@ -1665,7 +1665,8 @@ ${ev0.news.trim()}
 }
 function tidyText(t){
   return String(t)
-    .replace(/\s*[—–]\s*/g," - ")            // travessão e meia-risca viram hífen
+    .replace(/(\d)\s*[\u2012-\u2015\u2212]\s*(\d)/g,"$1-$2")   // faixas numéricas: 72–88 vira 72-88
+    .replace(/\s*[\u2012-\u2015\u2212]\s*/g," - ")            // travessão, meia-risca e afins viram hífen
     .replace(/\*\*(.+?)\*\*/g,"$1").replace(/(^|\s)\*(\S.*?\S)\*(?=\s|$)/g,"$1$2")   // negrito/itálico de markdown
     .replace(/^\s*[•·]\s+/gm,"- ")            // marcadores que não são hífen
     .replace(/^#{1,6}\s+(?=\S)/gm,(m,o,s)=>m)  // mantém # do modelo
@@ -1770,7 +1771,7 @@ function evolucaoTab(pid){
   const ssvvBox=h("div",{class:"card",id:"ssvvBox",hidden:!ev.ssvvLine},h("div",{class:"card-h"},h("h3",{text:"Controles 24h"}),h("span",{class:"spacer"}),h("button",{type:"button",class:"btn sec sm",onclick:()=>copyText($("ssvvText").textContent,st,"Controles copiados.")},"Copiar")),h("div",{class:"card-b"},h("div",{class:"mono-line",id:"ssvvText",text:ev.ssvvLine||""})));
   const outTag=h("span",{class:"tag",id:"outTag",text:ev.out?"Salva "+fmtStamp(ev.at):"Ainda não gerada"});
   if(ev.out) outTag.className="tag done";
-  const out=h("pre",{class:"outtext"+(ev.out?"":" placeholder"),id:"evoOut",text:ev.out||"A evolução organizada aparece aqui, já com controles, dispositivos, exame físico, exames e metas que você marcou."});
+  const out=h("pre",{class:"outtext"+(ev.out?"":" placeholder"),id:"evoOut",text:(ev.out?tidyText(ev.out):"")||"A evolução organizada aparece aqui, já com controles, dispositivos, exame físico, exames e metas que você marcou."});
   const alertsBox=h("div",{class:"alerts",id:"alertsBox",hidden:!ev.alerts},h("h4",{text:"Análise crítica do caso · não vai na cópia"}),h("div",{class:"outtext",id:"alertsText",text:ev.alerts||""}));
   const imp=p.imp||{};
   const impBox=h("div",{class:"impress "+((TREND[imp.trend]||[])[1]||""),id:"impBox"});
@@ -1829,7 +1830,7 @@ async function runEvolution(pid,adjust){
     if(!adjust&&raw&&raw!==ev.ssvvSrc){
       if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="Resumindo os sinais vitais";$("outTag").className="tag live";$("outTag").textContent="Controles"}
       const r=await sample(ssvvPrompt(raw),{signal:ctl.signal,cache:false,modelTier:"quick",onRetry:(i,n)=>{if(onPage(pid))$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}});
-      const line=r.text.trim(); save(pid,{evo:{ssvvLine:line,ssvvSrc:raw}});
+      const line=tidyText(r.text.trim()); save(pid,{evo:{ssvvLine:line,ssvvSrc:raw}});
       if(onPage(pid)){$("ssvvBox").hidden=false;$("ssvvText").textContent=line}
     } else if(!raw&&ev.ssvvLine&&!adjust){ save(pid,{evo:{ssvvLine:"",ssvvSrc:""}}); if(onPage(pid))$("ssvvBox").hidden=true; }
     p=P.get(pid);
@@ -1908,7 +1909,7 @@ async function runImp(pid,sample){
   try{
     const r=await sample.json(impPrompt(p,evo,(p.imp||{}).extra||""),{signal:ctl.signal,cache:false,modelTier:"quick"});
     const tr=String((r&&r.tendencia)||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
-    const txt=String((r&&r.impressao)||"").trim(); if(!txt) throw {code:"empty_completion"};
+    const txt=tidyText(String((r&&r.impressao)||"").trim()); if(!txt) throw {code:"empty_completion"};
     const at=Date.now(); const hist=(P.get(pid).impHist||[]).concat([{at,trend:tr,text:txt}]).slice(-30);
     save(pid,{imp:{trend:tr,text:txt,at},impHist:hist},0);
     if(onPage(pid)){$("impText").className="outtext";$("impText").textContent=txt;$("impPill").textContent="";$("impPill").append(trendPill(tr));$("impBox").className="impress "+((TREND[tr]||[])[1]||"")}
@@ -2145,7 +2146,7 @@ ${t.slice(0,60000)}
       const arr=(r&&Array.isArray(r.exames)?r.exames:[]).filter(x=>x&&x.texto);
       if(!arr.length) throw {code:"invalid_json"};
       const fallback=dmToISO(dt.value)||todayISO();
-      addItems(arr.map(x=>({id:uid36(),date:(/^\d{4}-\d{2}-\d{2}$/.test(x.data||"")&&!dt.value)?x.data:fallback,exame:String(x.exame||"").trim(),texto:String(x.texto).trim(),at:Date.now()})));
+      addItems(arr.map(x=>({id:uid36(),date:(/^\d{4}-\d{2}-\d{2}$/.test(x.data||"")&&!dt.value)?x.data:fallback,exame:String(x.exame||"").trim(),texto:tidyText(String(x.texto).trim()),at:Date.now()})));
     }catch(e){ if($("imgSt")){const s=$("imgSt");s.className="status err";s.textContent="Não consegui organizar. "+errMsg(e)+" Você pode usar Salvar como está."} }
     finally{ go.disabled=asIs.disabled=false }
   };
