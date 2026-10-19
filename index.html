@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 18/10 (1)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 19/10 (1)</span></p>
 </div>
 
 <script>
@@ -1631,13 +1631,14 @@ ${split?`- Depois da linha ${MARK} (fica fora do prontuário), faça a análise 
 """
 Encontro paciente em leito de enfermaria, hemodinamicamente estável, respirando espontaneamente em ar ambiente, lúcido, orientado em tempo e espaço, diurese e evacuação presentes e com boa aceitação alimentar. Sem queixas no momento. Checo controles, mantém estáveis e exames laboratoriais dentro dos valores de normalidade.
 - refere melhora parcial de dor abdominal, nega sintomas urinários;
-- estável clínica e hemodinamicamente;
+Estável clínica e hemodinamicamente, em melhora da dor abdominal.
 """
   Siga essa estrutura:
   1) Parágrafo de abertura em primeira pessoa ("Encontro paciente...", "Checo controles..."), juntando em texto corrido e bem encadeado tudo o que veio do beira leito e dos controles, inclusive o que está normal: acompanhante com nome e parentesco quando houver ("acompanhada do filho Carlos"), estado hemodinâmico, respiração e O2, consciência, sono ("refere sono reparador"), dor, náuseas, diurese, evacuação, aceitação alimentar e mobilidade. Escreva como um médico escreveria, não como lista: "Sono bom." sozinho não; "refere sono reparador e nega dor" sim. Quando algo estiver alterado, escreva do mesmo jeito, só trocando o trecho (ex.: "sonolenta, porém despertável", "evacuação ausente há 3 dias", "em cateter nasal a 2 L/min"). Depois, queixas ("Sem queixas no momento." ou a queixa). Feche com "Checo controles," e o resumo dos controles e dos exames em uma frase (ex.: "Checo controles, afebril, PA estável, e exames com Creat em queda.").
   2) Tópicos curtos com hífen, cada um terminando em ";", só com o que é específico do dia: queixas e achados, intercorrências, resposta ao tratamento, pareceres, exames que mudaram. Sem repetir o parágrafo.
-  3) O último tópico é a impressão do caso, curta, no mesmo tom (ex.: "- estável clínica e hemodinamicamente, em melhora do quadro infeccioso;", "- piora da função renal, mantém diurese, reavalio volemia;").
-- Impressão clínica: é o último tópico da seção Evolução (item 3 acima), sem a palavra "Impressão:" e sem parágrafo separado: se está em melhora, piora ou estável e em que se baseia, em poucas palavras. Só compare exame com valor anterior quando os dois valores estiverem escritos nos dados; sem valor anterior nos dados, não compare e não cite valor anterior. Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
+  3) Fechando a seção, a impressão do caso numa linha própria, SEM hífen no início, como frase de texto corrido que começa com letra maiúscula e termina com ponto, no mesmo tom (ex.: "Estável clínica e hemodinamicamente, em melhora do quadro infeccioso.", "Em melhora do quadro respiratório e da função renal, mantém hiperglicemia, ajusto insulina."). Nunca coloque a impressão como tópico com "-".
+  Nos tópicos do item 2, não repita o que já está no parágrafo de abertura.
+- Impressão clínica: é a frase final da seção Evolução (item 3 acima), sem hífen no começo e sem a palavra "Impressão:": se está em melhora, piora ou estável e em que se baseia, em poucas palavras. Só compare exame com valor anterior quando os dois valores estiverem escritos nos dados; sem valor anterior nos dados, não compare e não cite valor anterior. Deve soar como o médico escreve no prontuário, nunca como resumo de IA.`;
 function buildEvoPrompt(p,raw,extra,split){
   const t=tpl("evolucao");
   return `Você recebe as instruções de trabalho de um médico e os dados de um paciente internado. Aplique as instruções.
@@ -1671,6 +1672,14 @@ function tidyText(t){
     .replace(/^\s*[•·]\s+/gm,"- ")            // marcadores que não são hífen
     .replace(/^#{1,6}\s+(?=\S)/gm,(m,o,s)=>m)  // mantém # do modelo
     .replace(/[ \t]+$/gm,"").replace(/\n{3,}/g,"\n\n");
+}
+function impNoDash(t){
+  const L=String(t).split("\n"); const si=L.findIndex(l=>/^\s*\|?\s*Evolu[cç][aã]o\s*:?\s*$/i.test(l)); if(si<0) return t;
+  let j=si+1; while(j<L.length&&!/^\s*\|\s*\S/.test(L[j])&&!/^\s*={3}/.test(L[j])) j++;
+  let k=j-1; while(k>si&&!L[k].trim()) k--;
+  if(k>si&&/^\s*-\s+/.test(L[k])&&/\b(est[aá]vel|melhora|piora|evolui|inalterad|sem mudan)/i.test(L[k])){
+    let s=L[k].replace(/^\s*-\s+/,"").trim().replace(/[;,.]\s*$/,""); L[k]=s.charAt(0).toUpperCase()+s.slice(1)+"."; }
+  return L.join("\n");
 }
 function fillSlots(text,p){
   const ev=p.evo||{}, lc=labsContext(p,3), ic=imgsContext(p,6).split("\n").filter(Boolean).map(l=>"- "+l).join("\n");
@@ -1845,7 +1854,7 @@ async function runEvolution(pid,adjust){
     const T0=Date.now(); let gotText=false; const tick=setInterval(()=>{ if(gotText||!onPage(pid)) return; const o=$("evoOut"); if(o&&/^(Organizando|A IA não respondeu)/.test(o.textContent)) o.textContent=o.textContent.replace(/ · \d+ s$/,"")+" · "+Math.round((Date.now()-T0)/1000)+" s" },1000);
     let r; try{ r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"default",onText:({text})=>{gotText=true;renderOut(pid,tidyText(fillSlots(text,P.get(pid))),split,false)},
       onRetry:(i,n)=>{if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}}}); } finally { clearInterval(tick) }
-    r={...r,text:tidyText(fillSlots(r.text,P.get(pid)))};
+    r={...r,text:impNoDash(tidyText(fillSlots(r.text,P.get(pid))))};
     const so=splitOut(r.text,split);
     const sg=extractSugs(so.alerts), useSug=autoSug(); so.alerts=sg.rest;
     const outBase=so.evo; so.evo=insertIntoPlan(outBase,useSug?sg.list:[]);
