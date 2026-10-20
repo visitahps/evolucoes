@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 19/10 (1)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 20/10 (1)</span></p>
 </div>
 
 <script>
@@ -1152,7 +1152,7 @@ function resumoTab(pid){
   left.append(metasCard(pid));
   // controles e dispositivos
   const ev=p.evo||{};
-  left.append(h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Controles 24h"})),h("div",{class:"card-b"},ev.ssvvLine?h("div",{class:"mono-line",text:ev.ssvvLine}):h("div",{class:"muted",text:"Cole os sinais vitais na aba Evolução."}))));
+  left.append(h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Controles 24h"})),h("div",{class:"card-b"},ev.ssvvLine?h("div",{class:"mono-line",text:ssvvClean(ev.ssvvLine)}):h("div",{class:"muted",text:"Cole os sinais vitais na aba Evolução."}))));
   const devs=(ev.devs||[]);
   left.append(h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Dispositivos"})),h("div",{class:"card-b"},devs.length||ev.devOther?h("div",{text:[devs.join(", "),ev.devOther].filter(Boolean).join(" · ")}):h("div",{class:"muted",text:"Nenhum marcado."}))));
   // exames
@@ -1580,7 +1580,7 @@ function patientContext(p){
   b.push("DATA DE HOJE: "+fmtDMY(todayISO())+". Use para o DIH, para contar os dias de antibiótico (D0 é o dia de início; hoje é D + número de dias desde o D0) e para chamar de \"hoje\" só o que for de hoje: exame de outro dia é citado pela data (ex.: \"labs de 12/10\").");
   b.push("DADOS DO CADASTRO (o que não estiver aqui vem do texto colado; nunca apague do texto um dado só porque falta no cadastro):\n"+[p.idade?"Idade: "+p.idade+" anos":"",p.sexo==="F"?"Sexo: feminino":p.sexo==="M"?"Sexo: masculino":"",p.dataInternacao?"Data de internação: "+fmtDMY(p.dataInternacao)+(d!=null?" (DIH "+d+")":""):"",p.procedencia?"Procedência: "+p.procedencia:"",p.hd?"Hipótese diagnóstica principal: "+p.hd:""].filter(Boolean).join("\n"));
   const ev=p.evo||{};
-  if(ev.ssvvLine) b.push(`SINAIS VITAIS DAS ÚLTIMAS 24H, JÁ RESUMIDOS (para interpretar): na seção de controles escreva apenas a marcação [[CONTROLES]] sozinha numa linha; o site coloca a linha exata.\n${ev.ssvvLine}`);
+  if(ev.ssvvLine) b.push(`SINAIS VITAIS DAS ÚLTIMAS 24H, JÁ RESUMIDOS (para interpretar): na seção de controles escreva apenas a marcação [[CONTROLES]] sozinha numa linha; o site coloca a linha exata.\n${ssvvClean(ev.ssvvLine)}`);
   const devs=ev.devs||[];
   if(devs.length||ev.devOther) b.push(`DISPOSITIVOS MARCADOS PELO MÉDICO: use exatamente estes na seção de dispositivos, um por linha com hífen, mantendo detalhes que o texto colado trouxer (local, data de inserção). "Outros achados" entra como linha própria.\n${devs.length?"Marcados: "+devs.join(", "):""}${ev.devOther?"\nOutros achados: "+ev.devOther:""}`);
   const blt=blText(p);
@@ -1654,7 +1654,8 @@ ${CACHE_CUT}${(p.imp||{}).extra?`\nINFORMAÇÕES DO MÉDICO PARA A IMPRESSÃO (u
 
 ${patientContext(p)}
 ${extra?`\nOBSERVAÇÃO DO MÉDICO PARA HOJE:\n${extra}\n`:""}
-TEXTO COLADO PELO MÉDICO (evolução anterior ou dados de base; o que for de dias anteriores é histórico):
+TEXTO COLADO PELO MÉDICO (rascunho de hoje ou evolução anterior; o que for de dias anteriores é histórico).
+O PLANO TERAPÊUTICO escrito neste texto é a conduta do médico e manda: reescreva linha por linha, com o mesmo conteúdo, só em primeira pessoa e com grafia corrigida. Não troque, não resuma a ponto de perder conduta, não remova linhas e não substitua por condutas de especialistas (pareceres, telecardio etc.) nem da sua análise. Conduta de especialista que o médico não colocou no plano fica só na seção Avaliação Especialidades. Se o plano dele é de alta, o plano continua sendo de alta. O que você acha que falta vai só nas SUGESTÕES PARA O PLANO.
 """
 ${raw||"(sem texto adicional; use os dados acima)"}
 """${(ev0=>ev0.news&&ev0.news.trim()?`
@@ -1673,6 +1674,13 @@ function tidyText(t){
     .replace(/^#{1,6}\s+(?=\S)/gm,(m,o,s)=>m)  // mantém # do modelo
     .replace(/[ \t]+$/gm,"").replace(/\n{3,}/g,"\n\n");
 }
+function ssvvClean(t){
+  const KEY=/\b(FC|FR|Sat|SpO2|PAS|PAD|PAM|PA|Temp|Tax|Dextro|HGT|Glic)\s*:?\s*\d/gi;
+  const L=String(t||"").replace(/[`*]/g,"").split("\n").map(l=>l.replace(/^\s*(?:[-•]\s*)?(?:linha final\s*:?\s*)?/i,"").trim()).filter(Boolean);
+  const c=L.filter(l=>(l.match(KEY)||[]).length>=2&&!/→|menor|maior|valores|considero/i.test(l));
+  let line=c.filter(l=>/\|/.test(l)).pop()||c.pop()||"";
+  return line.replace(/(?<![\d.,])(\d+(?:[.,]\d+)?)\s*-\s*\1(?![\d.,])/g,"$1").replace(/\s*\|\s*/g," | ").replace(/[.;]\s*$/,"").trim();
+}
 function impNoDash(t){
   const L=String(t).split("\n"); const si=L.findIndex(l=>/^\s*\|?\s*Evolu[cç][aã]o\s*:?\s*$/i.test(l)); if(si<0) return t;
   let j=si+1; while(j<L.length&&!/^\s*\|\s*\S/.test(L[j])&&!/^\s*={3}/.test(L[j])) j++;
@@ -1682,11 +1690,11 @@ function impNoDash(t){
   return L.join("\n");
 }
 function fillSlots(text,p){
-  const ev=p.evo||{}, lc=labsContext(p,3), ic=imgsContext(p,6).split("\n").filter(Boolean).map(l=>"- "+l).join("\n");
+  const ev=p.evo||{}, sl=ssvvClean(ev.ssvvLine), lc=labsContext(p,3), ic=imgsContext(p,6).split("\n").filter(Boolean).map(l=>"- "+l).join("\n");
   return String(text)
     .replace(/^[ \t-]*\[\[\s*LABS\s*\]\][ \t]*$/gm,lc||"").replace(/\[\[\s*LABS\s*\]\]/g,lc||"")
     .replace(/^[ \t-]*\[\[\s*IMAGEM\s*\]\][ \t]*$/gm,ic||"").replace(/\[\[\s*IMAGEM\s*\]\]/g,ic||"")
-    .replace(/^[ \t-]*\[\[\s*CONTROLES\s*\]\][ \t]*$/gm,ev.ssvvLine||"").replace(/\[\[\s*CONTROLES\s*\]\]/g,ev.ssvvLine||"");
+    .replace(/^[ \t-]*\[\[\s*CONTROLES\s*\]\][ \t]*$/gm,sl).replace(/\[\[\s*CONTROLES\s*\]\]/g,sl);
 }
 function evoReminder(p){
   const r=[];
@@ -1727,6 +1735,9 @@ Regras:
 - PA vem como PAS/PAD (ex.: 128/76 ou 128x76): separe em PAS e PAD.
 - Use apenas valores presentes nos dados. Não invente valores. Parâmetro sem nenhum registro fica fora da linha.
 - Responda somente com a linha final, sem comentários e sem markdown.
+- Não explique, não mostre raciocínio, não liste os valores. A resposta inteira é UMA linha, que começa pela primeira sigla (ex.: FC 67-85 | FR 17-19 | ...).
+- Sem data e hora em cada registro, use todos os valores colados, sem comentar isso.
+- Parâmetro com um único valor: escreva só o valor (ex.: Dextro 71).
 
 DADOS COLADOS DA TELA DE MONITORIZAÇÃO:
 """
@@ -1777,7 +1788,7 @@ function evolucaoTab(pid){
   L.append(lb);
   // ---- saída
   const R=h("div",{class:"stack"});
-  const ssvvBox=h("div",{class:"card",id:"ssvvBox",hidden:!ev.ssvvLine},h("div",{class:"card-h"},h("h3",{text:"Controles 24h"}),h("span",{class:"spacer"}),h("button",{type:"button",class:"btn sec sm",onclick:()=>copyText($("ssvvText").textContent,st,"Controles copiados.")},"Copiar")),h("div",{class:"card-b"},h("div",{class:"mono-line",id:"ssvvText",text:ev.ssvvLine||""})));
+  const ssvvBox=h("div",{class:"card",id:"ssvvBox",hidden:!ev.ssvvLine},h("div",{class:"card-h"},h("h3",{text:"Controles 24h"}),h("span",{class:"spacer"}),h("button",{type:"button",class:"btn sec sm",onclick:()=>copyText($("ssvvText").textContent,st,"Controles copiados.")},"Copiar")),h("div",{class:"card-b"},h("div",{class:"mono-line",id:"ssvvText",text:ssvvClean(ev.ssvvLine)})));
   const outTag=h("span",{class:"tag",id:"outTag",text:ev.out?"Salva "+fmtStamp(ev.at):"Ainda não gerada"});
   if(ev.out) outTag.className="tag done";
   const out=h("pre",{class:"outtext"+(ev.out?"":" placeholder"),id:"evoOut",text:(ev.out?tidyText(ev.out):"")||"A evolução organizada aparece aqui, já com controles, dispositivos, exame físico, exames e metas que você marcou."});
@@ -1791,7 +1802,7 @@ function evolucaoTab(pid){
   const impText=h("div",{class:"outtext"+(imp.text?"":" placeholder"),id:"impText",text:imp.text||"Gerada logo após a evolução: resume o caso e indica melhora, piora ou estabilidade."});
   const impRedo=h("button",{type:"button",class:"btn quiet sm",id:"impRedo"},"Gerar impressão de novo");
   impBox.append(h("div",{class:"row"},h("b",{style:"font-family:var(--display);font-weight:600;font-size:1.05rem",text:"Impressão"}),impPill,h("span",{class:"spacer"}),h("label",{class:"row small muted",style:"gap:6px"},impCopy,"Repetir no fim da cópia")),h("div",{class:"small muted",text:"A impressão já vai integrada ao texto da Evolução. Este quadro mostra a tendência do dia (melhora, piora, estável) para o resumo e o histórico."}),impText,impExtra,h("div",{class:"row"},impRedo));
-  const outCard=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Para o prontuário"}),outTag,h("span",{class:"spacer"}),h("button",{type:"button",class:"btn sec sm",id:"evoCopy"},"Copiar")),h("div",{class:"card-b"},numWarnEl(ev.numWarn),out,sugCard(pid),impBox,alertsBox,promptViewer(pid)));
+  const outCard=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Para o prontuário"}),outTag,h("span",{class:"spacer"}),h("button",{type:"button",class:"btn sec sm",id:"evoCopy"},"Copiar")),h("div",{class:"card-b"},numWarnEl(ev.numWarn),planWarnEl(ev.planWarn),out,sugCard(pid),impBox,alertsBox,promptViewer(pid)));
   const adj=h("input",{class:"in",id:"adjust",placeholder:"Ajustar: ex.: evolução mais curta; tire a sugestão de teleparecer",autocomplete:"off"});
   const adjGo=h("button",{type:"button",class:"btn quiet",id:"adjGo"},"Ajustar");
   const adjBox=h("div",{class:"row",id:"adjBox",hidden:!ev.out},h("div",{style:"flex:1;min-width:200px"},adj),adjGo);
@@ -1836,10 +1847,12 @@ async function runEvolution(pid,adjust){
     let p=P.get(pid); const ev=p.evo||{}; const split=ev.split!==false;
     // 1) sinais vitais
     const raw=(ev.ssvvRaw||"").trim();
-    if(!adjust&&raw&&raw!==ev.ssvvSrc){
+    if(!adjust&&raw&&(raw!==ev.ssvvSrc||!ssvvClean(ev.ssvvLine))){
       if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="Resumindo os sinais vitais";$("outTag").className="tag live";$("outTag").textContent="Controles"}
       const r=await sample(ssvvPrompt(raw),{signal:ctl.signal,cache:false,modelTier:"quick",onRetry:(i,n)=>{if(onPage(pid))$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}});
-      const line=tidyText(r.text.trim()); save(pid,{evo:{ssvvLine:line,ssvvSrc:raw}});
+      let line=ssvvClean(tidyText(r.text.trim()));
+      if(!line){ const r2=await sample(ssvvPrompt(raw)+"\n\nIMPORTANTE: responda apenas a linha, nada mais.",{signal:ctl.signal,cache:false,modelTier:"default"}); line=ssvvClean(tidyText(r2.text.trim())); }
+      save(pid,{evo:{ssvvLine:line,ssvvSrc:raw}});
       if(onPage(pid)){$("ssvvBox").hidden=false;$("ssvvText").textContent=line}
     } else if(!raw&&ev.ssvvLine&&!adjust){ save(pid,{evo:{ssvvLine:"",ssvvSrc:""}}); if(onPage(pid))$("ssvvBox").hidden=true; }
     p=P.get(pid);
@@ -1857,14 +1870,15 @@ async function runEvolution(pid,adjust){
     r={...r,text:impNoDash(tidyText(fillSlots(r.text,P.get(pid))))};
     const so=splitOut(r.text,split);
     const sg=extractSugs(so.alerts), useSug=autoSug(); so.alerts=sg.rest;
-    const outBase=so.evo; so.evo=insertIntoPlan(outBase,useSug?sg.list:[]);
-    save(pid,{evo:{outBase,sugs:sg.list.map(t=>({t,on:useSug}))}},0);
+    const outBase=so.evo; const altaPlan=planAlta(so.evo)||planAlta(P.get(pid).evo&&P.get(pid).evo.raw); so.evo=insertIntoPlan(outBase,useSug&&!altaPlan?sg.list:[]);
+    save(pid,{evo:{outBase,sugs:sg.list.map(t=>({t,on:useSug&&!altaPlan}))}},0);
     save(pid,{evo:{out:so.evo,alerts:so.alerts,at:Date.now()},evoHist:[...(P.get(pid).evoHist||[]).filter(x=>x.date!==todayISO()),{date:todayISO(),at:Date.now(),out:so.evo}].slice(-40)},0);
     lastTurns={pid,turns:[...(Array.isArray(input)?input:[{role:"user",content:input}]),{role:"assistant",content:r.text}]};
     renderOut(pid,so.evo+(so.alerts?"\n"+MARK+"\n"+so.alerts:""),split,true);
     if(onPage(pid)){const sb=$("sugBox");if(sb)sb.replaceWith(sugCard(pid))}
     { const src=(Array.isArray(input)?input.map(m=>m.content).join("\n"):input)+"\n"+labsContext(P.get(pid),50); LAST_PROMPT[pid]=src;
-      const nw=unknownNums(so.evo,src); save(pid,{evo:{numWarn:nw}},0); if(onPage(pid)) showNumWarn(nw); }
+      const nw=unknownNums(so.evo,src); save(pid,{evo:{numWarn:nw}},0); if(onPage(pid)) showNumWarn(nw);
+      const pm=planMissing((P.get(pid).evo||{}).raw||"",outBase); save(pid,{evo:{planWarn:pm}},0); if(onPage(pid)) showPlanWarn(pm); }
     if(onPage(pid))$("adjBox").hidden=false;
     if(r.truncated&&onPage(pid)){st.className="status err";st.textContent="A resposta foi cortada no limite de tamanho. Revise o final."}
     if(!adjust&&P.get(pid).apoioAuto===true){ apoioP=runApoioParallel(pid,sample); apoioP.catch(()=>{}); }
@@ -2000,6 +2014,8 @@ function promptViewer(pid){
   return d;
 }
 function numWarnEl(list){return h("div",{class:"alerts",id:"numWarn",hidden:!(list&&list.length),style:"border-color:var(--bad)"},h("h4",{style:"color:var(--bad)",text:"Confira estes números · não estão nos dados que você colou nem nos exames organizados"}),h("div",{class:"outtext",id:"numWarnT",text:(list||[]).join("  ·  ")}))}
+function planWarnEl(list){return h("div",{class:"alerts",id:"planWarn",hidden:!(list&&list.length),style:"border-color:var(--bad)"},h("h4",{style:"color:var(--bad)",text:"Confira o plano · estas linhas do seu plano colado não apareceram no plano organizado"}),h("div",{class:"outtext",id:"planWarnT",text:(list||[]).map(x=>"- "+x).join("\n")}))}
+function showPlanWarn(list){const b=$("planWarn");if(!b)return;b.hidden=!list.length;$("planWarnT").textContent=list.map(x=>"- "+x).join("\n")}
 function showNumWarn(list){const b=$("numWarn");if(!b)return;b.hidden=!list.length;$("numWarnT").textContent=list.join("  ·  ")}
 // ===================== sugestões de conduta que entram no plano =====================
 const autoSug=()=>{try{return localStorage.getItem("evo.autosug")!=="0"}catch(e){return true}};
@@ -2013,6 +2029,22 @@ function extractSugs(alerts){
   return {list:[...new Set(list)].slice(0,10),rest:rest.join("\n").replace(/\n{3,}/g,"\n\n").trim()};
 }
 // coloca as linhas no fim da seção Plano Terapêutico (antes do próximo título)
+function planSection(t){
+  const L=String(t||"").split("\n"); const pi=L.findIndex(l=>/^\s*\|?\s*#*\s*(Plano Terap[eê]utico|Plano|Conduta)\s*:?/i.test(l)); if(pi<0) return [];
+  const out=[]; const first=L[pi].replace(/^\s*\|?\s*#*\s*(Plano Terap[eê]utico|Plano|Conduta)\s*:?\s*/i,"").trim(); if(first) out.push(first);
+  for(let j=pi+1;j<L.length;j++){ if(/^\s*\|\s*\S/.test(L[j])||/^\s*(Metas para alta|An[aá]lise Cr[ií]tica|={3})/i.test(L[j])) break; const s=L[j].replace(/^\s*[-•*]\s*/,"").trim(); if(s) out.push(s); }
+  return out;
+}
+const planAlta=t=>planSection(t).some(l=>/\balta\b/i.test(l)&&!/previs[aã]o de alta|aguard|sem previs/i.test(l));
+function planMissing(raw,out){
+  const norm=s=>String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const STOP=new Set("para com sobre pelo pela paciente quadro apos ainda entre mais como cada esta este essa esse ja nao sem dos das".split(" "));
+  const toks=s=>norm(s).split(/[^a-z0-9]+/).filter(w=>w.length>=4&&!STOP.has(w)).map(w=>w.slice(0,5));
+  const o=planSection(out).map(l=>new Set(toks(l))), oAll=new Set(o.flatMap(x=>[...x]));
+  return planSection(raw).filter(l=>{ const t=[...new Set(toks(l))]; if(t.length<2) return false;
+    const best=Math.max(0,...o.map(S=>t.filter(w=>S.has(w)).length/t.length)); const all=t.filter(w=>oAll.has(w)).length/t.length;
+    return best<0.35&&all<0.5; }).slice(0,8);
+}
 function insertIntoPlan(evo,lines){
   if(!lines.length) return evo;
   const L=String(evo).split("\n");
