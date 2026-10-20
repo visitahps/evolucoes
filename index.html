@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 20/10 (1)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 20/10 (2)</span></p>
 </div>
 
 <script>
@@ -1655,7 +1655,7 @@ ${CACHE_CUT}${(p.imp||{}).extra?`\nINFORMAÇÕES DO MÉDICO PARA A IMPRESSÃO (u
 ${patientContext(p)}
 ${extra?`\nOBSERVAÇÃO DO MÉDICO PARA HOJE:\n${extra}\n`:""}
 TEXTO COLADO PELO MÉDICO (rascunho de hoje ou evolução anterior; o que for de dias anteriores é histórico).
-O PLANO TERAPÊUTICO escrito neste texto é a conduta do médico e manda: reescreva linha por linha, com o mesmo conteúdo, só em primeira pessoa e com grafia corrigida. Não troque, não resuma a ponto de perder conduta, não remova linhas e não substitua por condutas de especialistas (pareceres, telecardio etc.) nem da sua análise. Conduta de especialista que o médico não colocou no plano fica só na seção Avaliação Especialidades. Se o plano dele é de alta, o plano continua sendo de alta. O que você acha que falta vai só nas SUGESTÕES PARA O PLANO.
+O PLANO TERAPÊUTICO escrito neste texto é a conduta do médico e manda: reescreva linha por linha, com o mesmo conteúdo, só em primeira pessoa e com grafia corrigida. Não troque, não resuma a ponto de perder conduta, não remova linhas e não substitua por condutas de especialistas (pareceres, telecardio etc.) nem da sua análise. Conduta de especialista que o médico não colocou no plano fica só na seção Avaliação Especialidades. Se o plano dele é de alta, o plano continua sendo de alta, no mesmo dia que ele escreveu: "alta hoje" continua hoje, nunca vira amanhã, e você não adia alta por achado de exame (se achar arriscado, diga só na análise). Datas relativas (hoje, ontem, amanhã) no texto colado valem a partir da DATA DE HOJE. Se ele escreveu que o antibiótico foi finalizado ou suspenso, a seção Antibioticoterapia Atual fica "Sem antibiótico" e os antibióticos vão para Antibioticoterapia Prévia com a observação de finalizado; a evolução e a impressão não dizem que segue em uso. Fatos e decisões escritos por ele hoje (alta, ATB finalizado, discussões com outras equipes, pendências) entram todos. O que você acha que falta vai só nas SUGESTÕES PARA O PLANO.
 """
 ${raw||"(sem texto adicional; use os dados acima)"}
 """${(ev0=>ev0.news&&ev0.news.trim()?`
@@ -1677,9 +1677,38 @@ function tidyText(t){
 function ssvvClean(t){
   const KEY=/\b(FC|FR|Sat|SpO2|PAS|PAD|PAM|PA|Temp|Tax|Dextro|HGT|Glic)\s*:?\s*\d/gi;
   const L=String(t||"").replace(/[`*]/g,"").split("\n").map(l=>l.replace(/^\s*(?:[-•]\s*)?(?:linha final\s*:?\s*)?/i,"").trim()).filter(Boolean);
-  const c=L.filter(l=>(l.match(KEY)||[]).length>=2&&!/→|menor|maior|valores|considero/i.test(l));
+  const c=L.filter(l=>(l.match(KEY)||[]).length>=2&&!/→|menor|maior|valores|considero/i.test(l)&&!/^\d{1,2}\/\d{1,2}/.test(l));
   let line=c.filter(l=>/\|/.test(l)).pop()||c.pop()||"";
   return line.replace(/(?<![\d.,])(\d+(?:[.,]\d+)?)\s*-\s*\1(?![\d.,])/g,"$1").replace(/\s*\|\s*/g," | ").replace(/[.;]\s*$/,"").trim();
+}
+function ssvvFromText(t){
+  const recs=[], Y=new Date().getFullYear();
+  String(t||"").split("\n").forEach(l=>{
+    const g=re=>{const m=l.match(re);return m?parseFloat(m[1].replace(",",".")):null};
+    const r={FC:g(/\bFC\s*:?\s*(\d{2,3})\b/i),FR:g(/\bFR\s*:?\s*(\d{1,2})\b/i),Sat:g(/\b(?:SatO2|SpO2|Sat|SO2)\s*:?\s*(\d{2,3})\b/i)};
+    const pa=l.match(/\bPA\s*:?\s*(\d{2,3})\s*[xX\/]\s*(\d{2,3})\b/);
+    if(pa){r.PAS=+pa[1];r.PAD=+pa[2]} else {r.PAS=g(/\bPAS\s*:?\s*(\d{2,3})\b/i);r.PAD=g(/\bPAD\s*:?\s*(\d{2,3})\b/i)}
+    r.Temp=g(/\b(?:Tax|Temp|T)\s*:?\s*((?:3\d|4[0-2])(?:[.,]\d)?)\b/i);
+    r.Dextro=g(/\b(?:Glicemia(?:\s+capilar)?|Dextro|HGT|Glic|DX)\s*:?\s*(\d{2,3})\b/i);
+    if(Object.values(r).filter(x=>x!=null).length<3) return;
+    const d=l.match(/\b(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?\s*(?:às\s*)?(\d{1,2})[:h](\d{2})/);
+    recs.push({r,ts:d?new Date(Y,+d[2]-1,+d[1],+d[3],+d[4]).getTime():null});
+  });
+  if(recs.length<2) return "";
+  const mx=Math.max(...recs.map(x=>x.ts||0)); const use=mx?recs.filter(x=>!x.ts||x.ts>=mx-24*3600e3):recs;
+  const f=n=>String(+n.toFixed(1)), out=[];
+  [["FC","FC"],["FR","FR"],["Sat","Sat"],["PAS","PAS"],["PAD","PAD"],["Temp","Temp"],["Dextro","Dextro"]].forEach(([k,lab])=>{
+    const v=use.map(x=>x.r[k]).filter(x=>x!=null); if(!v.length) return;
+    const a=Math.min(...v), b=Math.max(...v); out.push(lab+" "+(a===b?f(a):f(a)+"-"+f(b)));
+  });
+  return out.join(" | ");
+}
+function fixControls(t){
+  const L=String(t).split("\n"); const ci=L.findIndex(l=>/^\s*\|?\s*Controles\b/i.test(l)); if(ci<0) return t;
+  let j=ci+1; while(j<L.length&&!/^\s*\|\s*\S/.test(L[j])) j++;
+  const body=L.slice(ci+1,j); const line=ssvvFromText(body.join("\n")); if(!line) return t;
+  const tail=body.length&&!body[body.length-1].trim()?[""]:[];
+  L.splice(ci+1,j-ci-1,line,...tail); return L.join("\n");
 }
 function impNoDash(t){
   const L=String(t).split("\n"); const si=L.findIndex(l=>/^\s*\|?\s*Evolu[cç][aã]o\s*:?\s*$/i.test(l)); if(si<0) return t;
@@ -1801,7 +1830,7 @@ function evolucaoTab(pid){
   impExtra.value=(imp.extra||""); impExtra.oninput=()=>save(pid,{imp:{extra:impExtra.value}},1200);
   const impText=h("div",{class:"outtext"+(imp.text?"":" placeholder"),id:"impText",text:imp.text||"Gerada logo após a evolução: resume o caso e indica melhora, piora ou estabilidade."});
   const impRedo=h("button",{type:"button",class:"btn quiet sm",id:"impRedo"},"Gerar impressão de novo");
-  impBox.append(h("div",{class:"row"},h("b",{style:"font-family:var(--display);font-weight:600;font-size:1.05rem",text:"Impressão"}),impPill,h("span",{class:"spacer"}),h("label",{class:"row small muted",style:"gap:6px"},impCopy,"Repetir no fim da cópia")),h("div",{class:"small muted",text:"A impressão já vai integrada ao texto da Evolução. Este quadro mostra a tendência do dia (melhora, piora, estável) para o resumo e o histórico."}),impText,impExtra,h("div",{class:"row"},impRedo));
+  impBox.append(h("div",{class:"row"},h("b",{style:"font-family:var(--display);font-weight:600;font-size:1.05rem",text:"Impressão"}),impPill,h("span",{class:"spacer"}),null),h("div",{class:"small muted",text:"A impressão já vai integrada ao texto da Evolução. Este quadro mostra a tendência do dia (melhora, piora, estável) para o resumo e o histórico."}),impText,impExtra,h("div",{class:"row"},impRedo));
   const outCard=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Para o prontuário"}),outTag,h("span",{class:"spacer"}),h("button",{type:"button",class:"btn sec sm",id:"evoCopy"},"Copiar")),h("div",{class:"card-b"},numWarnEl(ev.numWarn),planWarnEl(ev.planWarn),out,sugCard(pid),impBox,alertsBox,promptViewer(pid)));
   const adj=h("input",{class:"in",id:"adjust",placeholder:"Ajustar: ex.: evolução mais curta; tire a sugestão de teleparecer",autocomplete:"off"});
   const adjGo=h("button",{type:"button",class:"btn quiet",id:"adjGo"},"Ajustar");
@@ -1811,7 +1840,7 @@ function evolucaoTab(pid){
   outCard.querySelector("#evoCopy").onclick=()=>{
     const e=P.get(pid).evo||{}, im=P.get(pid).imp||{};
     let txt=e.out||""; if(!txt){st.className="status err";st.textContent="Ainda não há evolução para copiar.";return}
-    if(im.text&&impCopy.checked) txt+="\n\n| Impressão:\n"+im.text;
+
     copyText(txt,st,e.alerts?"Copiado. A análise e as sugestões ficaram de fora.":"Copiado.");
   };
   go.onclick=()=>runEvolution(pid,null);
@@ -1849,7 +1878,7 @@ async function runEvolution(pid,adjust){
     const raw=(ev.ssvvRaw||"").trim();
     if(!adjust&&raw&&(raw!==ev.ssvvSrc||!ssvvClean(ev.ssvvLine))){
       if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="Resumindo os sinais vitais";$("outTag").className="tag live";$("outTag").textContent="Controles"}
-      const r=await sample(ssvvPrompt(raw),{signal:ctl.signal,cache:false,modelTier:"quick",onRetry:(i,n)=>{if(onPage(pid))$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}});
+      const det=ssvvFromText(raw); const r=det?{text:det}:await sample(ssvvPrompt(raw),{signal:ctl.signal,cache:false,modelTier:"quick",onRetry:(i,n)=>{if(onPage(pid))$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}});
       let line=ssvvClean(tidyText(r.text.trim()));
       if(!line){ const r2=await sample(ssvvPrompt(raw)+"\n\nIMPORTANTE: responda apenas a linha, nada mais.",{signal:ctl.signal,cache:false,modelTier:"default"}); line=ssvvClean(tidyText(r2.text.trim())); }
       save(pid,{evo:{ssvvLine:line,ssvvSrc:raw}});
@@ -1867,7 +1896,7 @@ async function runEvolution(pid,adjust){
     const T0=Date.now(); let gotText=false; const tick=setInterval(()=>{ if(gotText||!onPage(pid)) return; const o=$("evoOut"); if(o&&/^(Organizando|A IA não respondeu)/.test(o.textContent)) o.textContent=o.textContent.replace(/ · \d+ s$/,"")+" · "+Math.round((Date.now()-T0)/1000)+" s" },1000);
     let r; try{ r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"default",onText:({text})=>{gotText=true;renderOut(pid,tidyText(fillSlots(text,P.get(pid))),split,false)},
       onRetry:(i,n)=>{if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}}}); } finally { clearInterval(tick) }
-    r={...r,text:impNoDash(tidyText(fillSlots(r.text,P.get(pid))))};
+    r={...r,text:fixControls(impNoDash(tidyText(fillSlots(r.text,P.get(pid)))))};
     const so=splitOut(r.text,split);
     const sg=extractSugs(so.alerts), useSug=autoSug(); so.alerts=sg.rest;
     const outBase=so.evo; const altaPlan=planAlta(so.evo)||planAlta(P.get(pid).evo&&P.get(pid).evo.raw); so.evo=insertIntoPlan(outBase,useSug&&!altaPlan?sg.list:[]);
@@ -1878,7 +1907,7 @@ async function runEvolution(pid,adjust){
     if(onPage(pid)){const sb=$("sugBox");if(sb)sb.replaceWith(sugCard(pid))}
     { const src=(Array.isArray(input)?input.map(m=>m.content).join("\n"):input)+"\n"+labsContext(P.get(pid),50); LAST_PROMPT[pid]=src;
       const nw=unknownNums(so.evo,src); save(pid,{evo:{numWarn:nw}},0); if(onPage(pid)) showNumWarn(nw);
-      const pm=planMissing((P.get(pid).evo||{}).raw||"",outBase); save(pid,{evo:{planWarn:pm}},0); if(onPage(pid)) showPlanWarn(pm); }
+      const e9=P.get(pid).evo||{}, src9=[e9.raw,e9.news].join("\n"); const pm=[...planConflicts(src9,outBase),...planMissing(e9.raw||"",outBase)]; save(pid,{evo:{planWarn:pm}},0); if(onPage(pid)) showPlanWarn(pm); }
     if(onPage(pid))$("adjBox").hidden=false;
     if(r.truncated&&onPage(pid)){st.className="status err";st.textContent="A resposta foi cortada no limite de tamanho. Revise o final."}
     if(!adjust&&P.get(pid).apoioAuto===true){ apoioP=runApoioParallel(pid,sample); apoioP.catch(()=>{}); }
@@ -2014,7 +2043,7 @@ function promptViewer(pid){
   return d;
 }
 function numWarnEl(list){return h("div",{class:"alerts",id:"numWarn",hidden:!(list&&list.length),style:"border-color:var(--bad)"},h("h4",{style:"color:var(--bad)",text:"Confira estes números · não estão nos dados que você colou nem nos exames organizados"}),h("div",{class:"outtext",id:"numWarnT",text:(list||[]).join("  ·  ")}))}
-function planWarnEl(list){return h("div",{class:"alerts",id:"planWarn",hidden:!(list&&list.length),style:"border-color:var(--bad)"},h("h4",{style:"color:var(--bad)",text:"Confira o plano · estas linhas do seu plano colado não apareceram no plano organizado"}),h("div",{class:"outtext",id:"planWarnT",text:(list||[]).map(x=>"- "+x).join("\n")}))}
+function planWarnEl(list){return h("div",{class:"alerts",id:"planWarn",hidden:!(list&&list.length),style:"border-color:var(--bad)"},h("h4",{style:"color:var(--bad)",text:"Confira · o que você escreveu e a evolução organizada não batem nestes pontos"}),h("div",{class:"outtext",id:"planWarnT",text:(list||[]).map(x=>"- "+x).join("\n")}))}
 function showPlanWarn(list){const b=$("planWarn");if(!b)return;b.hidden=!list.length;$("planWarnT").textContent=list.map(x=>"- "+x).join("\n")}
 function showNumWarn(list){const b=$("numWarn");if(!b)return;b.hidden=!list.length;$("numWarnT").textContent=list.join("  ·  ")}
 // ===================== sugestões de conduta que entram no plano =====================
@@ -2036,6 +2065,17 @@ function planSection(t){
   return out;
 }
 const planAlta=t=>planSection(t).some(l=>/\balta\b/i.test(l)&&!/previs[aã]o de alta|aguard|sem previs/i.test(l));
+function planConflicts(raw,out){
+  const n=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); const R=n(raw), O=n(out), w=[];
+  const hoje=/alta[^.\n]{0,40}\bhoje\b|\bhoje\b[^.\n]{0,20}\balta\b/, amanha=/alta[^.\n]{0,40}amanha|amanha[^.\n]{0,20}\balta\b/;
+  if(hoje.test(R)&&!amanha.test(R)&&amanha.test(O)&&!hoje.test(O)) w.push("Seu texto diz alta HOJE e a evolução organizada diz amanhã");
+  if(amanha.test(R)&&!hoje.test(R)&&hoje.test(O)&&!amanha.test(O)) w.push("Seu texto diz alta AMANHÃ e a evolução organizada diz hoje");
+  if(/\b(atb|antibiotic\w*)\b[^.\n]{0,25}(finaliz|encerr|suspens|termin)/.test(R)){
+    const a=(O.match(/antibioticoterapia atual\s*:?\s*\n([\s\S]*?)(\n\s*\||$)/)||[])[1]||"";
+    if(a&&!/sem antibiotic|finaliz|encerr|suspens/.test(a)) w.push("Seu texto diz que o ATB foi finalizado e a evolução organizada mantém antibiótico em uso");
+  }
+  return w;
+}
 function planMissing(raw,out){
   const norm=s=>String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
   const STOP=new Set("para com sobre pelo pela paciente quadro apos ainda entre mais como cada esta este essa esse ja nao sem dos das".split(" "));
