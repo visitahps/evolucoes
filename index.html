@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 20/10 (2)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 28/10 (1)</span></p>
 </div>
 
 <script>
@@ -471,25 +471,25 @@ Avaliação Especialidades:
 * Corrigir grafia
 * Integrar ao contexto clínico global
 
-Plano Terapêutico:
-* Condutas objetivas
-* Suporte clínico
-* Monitorização
-* Reavaliações pertinentes
-* Ajustes terapêuticos plausíveis
-* Profilaxias
-* Vigilância clínica
-* Planejamento assistencial
-* Integração de especialidades
-* Condutas adicionais apenas quando relevantes
+Conduta:
+* Tratamento atual e foco (ex.: Mantenho ceftriaxona D5, foco urinário)
+* Exames solicitados hoje
+* O que estou aguardando (culturas, pareceres, exames, vaga)
+* Ajustes terapêuticos
 
-Metas para alta:
-* Estabilidade clínica
-* Estabilidade hemodinâmica
-* Compensação do quadro
-* Controle sintomático
-* Critérios objetivos de alta
-* Planejamento seguro de transição de cuidado
+Metas e Pendências:
+* Cada meta ou pendência com prazo em horas ou dias (ex.: Resultado das culturas, em 48h)
+
+Planejamento de Alta:
+* Destino específico (domicílio com família, CASE, ILPI, home care, transferência)
+* Encaminhamentos e orientações registradas
+
+Metas Multidisciplinares:
+* Nutrição: meta; Prazo
+* Fisioterapia: meta; Prazo
+* Fonoaudiologia: meta; Prazo
+* Enfermagem: meta; Prazo
+* Área sem meta no caso: registrar de forma explícita
 
 Análise Crítica e Sugestões:
 Gerar apenas quando houver relevância clínica plausível:
@@ -916,7 +916,28 @@ sampleFn.limits=async()=>({maxPromptBytes:1e6,images:{maxCount:8,maxInputBytes:2
 const LS_T="evo.templates.v2";
 let templates=DEFAULTS.map(t=>({...t}));
 try{const s=JSON.parse(localStorage.getItem(LS_T)||"null");if(Array.isArray(s)&&s.length)templates=s}catch(e){}
-function mergeDefaults(arr){const ids=new Set(arr.map(t=>t.id));DEFAULTS.forEach(d=>{if(!ids.has(d.id))arr.push({...d})});return arr}
+const EVO_NEW_PLAN=`Conduta:
+* Tratamento atual e foco (ex.: Mantenho ceftriaxona D5, foco urinário)
+* Exames solicitados hoje
+* O que estou aguardando (culturas, pareceres, exames, vaga)
+* Ajustes terapêuticos
+
+Metas e Pendências:
+* Cada meta ou pendência com prazo em horas ou dias (ex.: Resultado das culturas, em 48h)
+
+Planejamento de Alta:
+* Destino específico (domicílio com família, CASE, ILPI, home care, transferência)
+* Encaminhamentos e orientações registradas
+
+Metas Multidisciplinares:
+* Nutrição: meta; Prazo
+* Fisioterapia: meta; Prazo
+* Fonoaudiologia: meta; Prazo
+* Enfermagem: meta; Prazo
+* Área sem meta no caso: registrar de forma explícita
+`;
+function migrateEvoTpl(arr){ arr.forEach(t=>{ if(t&&t.id==="evolucao"&&typeof t.text==="string") t.text=t.text.replace(/Plano Terap[eê]utico:\n\* Condutas objetivas[\s\S]*?\* Planejamento seguro de transi[cç][aã]o de cuidado\n/,EVO_NEW_PLAN) }); return arr }
+function mergeDefaults(arr){ migrateEvoTpl(arr);const ids=new Set(arr.map(t=>t.id));DEFAULTS.forEach(d=>{if(!ids.has(d.id))arr.push({...d})});return arr}
 templates=mergeDefaults(templates);
 const tpl=id=>templates.find(t=>t.id===id)||DEFAULTS.find(t=>t.id===id);
 const flagOf=(t,k)=>{if(t[k]!==undefined)return !!t[k];const d=DEFAULTS.find(x=>x.id===t.id);return !!(d&&d[k])};
@@ -1164,11 +1185,11 @@ function resumoTab(pid){
 }
 function metasCard(pid){
   const p=P.get(pid);
-  const card=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Metas para alta"})));
+  const card=h("div",{class:"card"},h("div",{class:"card-h"},h("h3",{text:"Metas e pendências"})));
   const b=h("div",{class:"card-b"});
   const list=h("div",{});
   const metas=p.metas||[];
-  if(!metas.length) list.append(h("div",{class:"muted small",text:"Nenhuma meta ainda. Elas entram na seção Metas para alta da evolução."}));
+  if(!metas.length) list.append(h("div",{class:"muted small",text:"Nenhuma meta ainda. Elas entram na seção Metas e Pendências da evolução, com o prazo."}));
   metas.forEach(m=>{
     const dl=m.prazo?(()=>{const d=daysSince(m.criada);const rest=m.prazo-(d||0);return rest>0?"faltam "+rest+" d":rest===0?"vence hoje":"atrasada "+(-rest)+" d"})():"";
     list.append(h("div",{class:"meta-row"+(m.done?" done":"")},
@@ -1592,7 +1613,7 @@ function patientContext(p){
   const todos=(p.todos||[]).filter(t=>!t.done);
   if(todos.length) b.push(`PENDÊNCIAS ABERTAS DO MÉDICO (inclua no plano terapêutico):\n${todos.map(t=>"- "+t.t).join("\n")}`);
   const metas=(p.metas||[]).filter(m=>!m.done);
-  if(metas.length) b.push(`METAS PARA ALTA DEFINIDAS PELO MÉDICO (inclua na seção de metas para alta):\n${metas.map(m=>"- "+m.t+(m.prazo?" (prazo "+m.prazo+" dias)":"")).join("\n")}`);
+  if(metas.length) b.push(`METAS DEFINIDAS PELO MÉDICO (inclua na seção Metas e Pendências, com o prazo):\n${metas.map(m=>"- "+m.t+(m.prazo?" (prazo "+m.prazo+" dias)":"")).join("\n")}`);
   const ic=imgsContext(p,6);
   if(ic) b.push(`EXAMES DE IMAGEM JÁ ORGANIZADOS PELO MÉDICO NA ABA IMAGEM. OBRIGATÓRIO: na seção Exames de Imagem escreva apenas a marcação [[IMAGEM]] sozinha numa linha (o site coloca os laudos no lugar); depois dela, só laudos do texto colado que não estejam abaixo:\n${ic}`);
   const pc=pareceresContext(p);
@@ -1613,7 +1634,24 @@ REGRAS DO MÉDICO PARA A EVOLUÇÃO (ele revisa e valida tudo antes de assinar; 
 ESTILO (o mais importante): o texto tem que parecer escrito à mão por um hospitalista apressado no fim da visita, nunca por IA.
 - Copie o jeito de escrever do próprio médico no texto colado: as abreviações dele (BEG, AAA, MV+, RHA+, ATB, EV, VO, s/n, HD), o tamanho das frases, a pontuação. Frases curtas, diretas, estilo de prontuário, podendo ser telegráficas.
 - Tamanho: a evolução final deve ter tamanho parecido com a que foi colada, nunca bem maior. Seção Evolução: o parágrafo de abertura mais 2 a 5 tópicos no caso estável; mais só se houve intercorrência.
-- Os tópicos com "*" e as listas das instruções do médico são o que considerar, não itens obrigatórios: escreva só o que tiver conteúdo real para este paciente hoje. Não preencha seção com frase genérica. Metas para alta: no máximo 3, específicas deste paciente (se o médico definiu metas, só as dele).
+- Os tópicos com "*" e as listas das instruções do médico são o que considerar, não itens obrigatórios: escreva só o que tiver conteúdo real para este paciente hoje. Não preencha seção com frase genérica. 
+
+SEÇÕES FINAIS DA EVOLUÇÃO (obrigatórias, nesta ordem, cada título com "| " e tópicos com "- "; substituem "Plano Terapêutico" e "Metas para alta" mesmo que o modelo ainda traga esses nomes):
+| Conduta:
+- Tratamento atual com o foco: "Mantenho ceftriaxona D5, foco urinário"; sem antibiótico, o tratamento principal do dia.
+- Exames solicitados hoje, numa linha começando por "Solicito".
+- O que estou aguardando, numa linha começando por "Aguardo" (culturas, pareceres, exames, vaga, documentação).
+- Demais condutas do médico, uma por linha, verbo em primeira pessoa.
+- As linhas do plano que o médico escreveu entram todas aqui (ver regra do texto colado). Sem justificativa.
+| Metas e Pendências:
+- Cada meta ou pendência com prazo em horas ou dias no fim: "- Resultado das culturas coletadas em 17/10, em 48h", "- Melhora do delirium, em 24h". Sem meta sem prazo. Específicas deste paciente, no máximo 4, incluindo as metas definidas pelo médico.
+| Planejamento de Alta:
+- "Destino:" específico (domicílio com a família, CASE de crônicos complexos, ILPI, home care, transferência). Se os dados não definem, escreva o destino mais provável e "a confirmar".
+- Encaminhamentos (ambulatório, especialidades, CASE) e orientações registradas (sinais de alarme, cuidados com curativo, higiene, dieta), cada um numa linha.
+| Metas Multidisciplinares:
+- Sempre as quatro áreas, nesta ordem: Nutrição, Fisioterapia, Fonoaudiologia, Enfermagem. Formato: "- Nutrição: dieta VO conforme aceitação, manter aporte proteico; Prazo: 48h".
+- Área sem meta neste caso: escreva explicitamente, com o motivo curto: "- Fonoaudiologia: sem meta no momento, deglutição sem alteração e dieta VO". Nunca deixe área em branco nem omita.
+- Enfermagem: riscos e cuidados reais deste paciente (queda, LPP com mudança de decúbito, flebite, broncoaspiração, glicemia capilar), de forma enxuta.
 - Proibido: "além disso", "vale ressaltar", "cabe destacar", "nesse contexto", "diante do exposto", "em suma", "de forma favorável", "mantém-se em acompanhamento", "segue em acompanhamento multidisciplinar", "quadro clínico estável do ponto de vista", "a ser reavaliado conforme evolução", adjetivos de enfeite e explicações do óbvio.
 - Nunca escreva no prontuário o que falta ou não foi encontrado (ex.: "labs de hoje não disponíveis", "sem ECO recente encontrado", "aguardo exames para confirmar"); isso vai para a análise ou para uma linha objetiva do plano ("- Solicito ECOTT").
 - Não repita a mesma informação em seções diferentes (ex.: exame já citado nos exames não precisa ser recontado na evolução; cite só o que mudou ou importa).
@@ -1655,7 +1693,7 @@ ${CACHE_CUT}${(p.imp||{}).extra?`\nINFORMAÇÕES DO MÉDICO PARA A IMPRESSÃO (u
 ${patientContext(p)}
 ${extra?`\nOBSERVAÇÃO DO MÉDICO PARA HOJE:\n${extra}\n`:""}
 TEXTO COLADO PELO MÉDICO (rascunho de hoje ou evolução anterior; o que for de dias anteriores é histórico).
-O PLANO TERAPÊUTICO escrito neste texto é a conduta do médico e manda: reescreva linha por linha, com o mesmo conteúdo, só em primeira pessoa e com grafia corrigida. Não troque, não resuma a ponto de perder conduta, não remova linhas e não substitua por condutas de especialistas (pareceres, telecardio etc.) nem da sua análise. Conduta de especialista que o médico não colocou no plano fica só na seção Avaliação Especialidades. Se o plano dele é de alta, o plano continua sendo de alta, no mesmo dia que ele escreveu: "alta hoje" continua hoje, nunca vira amanhã, e você não adia alta por achado de exame (se achar arriscado, diga só na análise). Datas relativas (hoje, ontem, amanhã) no texto colado valem a partir da DATA DE HOJE. Se ele escreveu que o antibiótico foi finalizado ou suspenso, a seção Antibioticoterapia Atual fica "Sem antibiótico" e os antibióticos vão para Antibioticoterapia Prévia com a observação de finalizado; a evolução e a impressão não dizem que segue em uso. Fatos e decisões escritos por ele hoje (alta, ATB finalizado, discussões com outras equipes, pendências) entram todos. O que você acha que falta vai só nas SUGESTÕES PARA O PLANO.
+O PLANO TERAPÊUTICO escrito neste texto é a conduta do médico e manda: reescreva linha por linha, com o mesmo conteúdo, só em primeira pessoa e com grafia corrigida. Não troque, não resuma a ponto de perder conduta, não remova linhas e não substitua por condutas de especialistas (pareceres, telecardio etc.) nem da sua análise. Conduta de especialista que o médico não colocou no plano fica só na seção Avaliação Especialidades. As linhas desse plano vão para a seção | Conduta: (e o que for de alta, para | Planejamento de Alta:). Se o plano dele é de alta, o plano continua sendo de alta, no mesmo dia que ele escreveu: "alta hoje" continua hoje, nunca vira amanhã, e você não adia alta por achado de exame (se achar arriscado, diga só na análise). Datas relativas (hoje, ontem, amanhã) no texto colado valem a partir da DATA DE HOJE. Se ele escreveu que o antibiótico foi finalizado ou suspenso, a seção Antibioticoterapia Atual fica "Sem antibiótico" e os antibióticos vão para Antibioticoterapia Prévia com a observação de finalizado; a evolução e a impressão não dizem que segue em uso. Fatos e decisões escritos por ele hoje (alta, ATB finalizado, discussões com outras equipes, pendências) entram todos. O que você acha que falta vai só nas SUGESTÕES PARA O PLANO.
 """
 ${raw||"(sem texto adicional; use os dados acima)"}
 """${(ev0=>ev0.news&&ev0.news.trim()?`
@@ -1800,9 +1838,9 @@ function evolucaoTab(pid){
   const extra=h("textarea",{class:"in",id:"evoExtra",rows:"2",placeholder:"Observação só para hoje (opcional)"});
   extra.value=ev.extra||""; extra.oninput=()=>save(pid,{evo:{extra:extra.value}},1200);
   const optSplit=h("input",{type:"checkbox",id:"optSplit",checked:ev.split!==false}); optSplit.onchange=()=>save(pid,{evo:{split:optSplit.checked}});
-  const tier=h("select",{class:"in",id:"optTier"},h("option",{value:"default"},"preciso (Sonnet, recomendado)"),h("option",{value:"quick"},"rápido (Haiku, erra mais)"),h("option",{value:"complex"},"máximo (Opus, mais lento)"));
-  try{tier.value=localStorage.getItem("evo.tier2")||"default"}catch(e){tier.value="default"}
-  tier.onchange=()=>{try{localStorage.setItem("evo.tier2",tier.value)}catch(e){}};
+  const tier=h("select",{class:"in",id:"optTier"},h("option",{value:"quick"},"econômico (Haiku, padrão)"),h("option",{value:"default"},"caprichado (Sonnet, ~20x mais caro)"),h("option",{value:"complex"},"máximo (Opus, bem mais caro)"));
+  try{tier.value=localStorage.getItem("evo.tier3")||"quick"}catch(e){tier.value="quick"}
+  tier.onchange=()=>{try{localStorage.setItem("evo.tier3",tier.value)}catch(e){}};
   const efNow=efText(p), nLabs=(p.labs||[]).length, nMetas=(p.metas||[]).filter(m=>!m.done).length;
   const ctxLine=h("div",{class:"small muted",text:"Entra junto: "+[efNow?"exame físico marcado":"exame físico (não marcado)",nLabs?nLabs+" exame(s) do histórico":"sem exames no histórico",nMetas?nMetas+" meta(s)":"sem metas",blText(p)?"beira leito de hoje":"beira leito (não preenchido)",p.imp?"impressão anterior":null].filter(Boolean).join(" · ")});
   const go=h("button",{type:"button",class:"btn",id:"evoGo"},"Reorganizar evolução");
@@ -1880,7 +1918,7 @@ async function runEvolution(pid,adjust){
       if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="Resumindo os sinais vitais";$("outTag").className="tag live";$("outTag").textContent="Controles"}
       const det=ssvvFromText(raw); const r=det?{text:det}:await sample(ssvvPrompt(raw),{signal:ctl.signal,cache:false,modelTier:"quick",onRetry:(i,n)=>{if(onPage(pid))$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}});
       let line=ssvvClean(tidyText(r.text.trim()));
-      if(!line){ const r2=await sample(ssvvPrompt(raw)+"\n\nIMPORTANTE: responda apenas a linha, nada mais.",{signal:ctl.signal,cache:false,modelTier:"default"}); line=ssvvClean(tidyText(r2.text.trim())); }
+      if(!line){ const r2=await sample(ssvvPrompt(raw)+"\n\nIMPORTANTE: responda apenas a linha, nada mais.",{signal:ctl.signal,cache:false,modelTier:"quick"}); line=ssvvClean(tidyText(r2.text.trim())); }
       save(pid,{evo:{ssvvLine:line,ssvvSrc:raw}});
       if(onPage(pid)){$("ssvvBox").hidden=false;$("ssvvText").textContent=line}
     } else if(!raw&&ev.ssvvLine&&!adjust){ save(pid,{evo:{ssvvLine:"",ssvvSrc:""}}); if(onPage(pid))$("ssvvBox").hidden=true; }
@@ -1894,7 +1932,7 @@ async function runEvolution(pid,adjust){
     else input=buildEvoPrompt(p,(p.evo||{}).raw||"",(p.evo||{}).extra||"",split);
     if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="Organizando";$("alertsBox").hidden=true;$("outTag").className="tag live";$("outTag").textContent="Escrevendo"}
     const T0=Date.now(); let gotText=false; const tick=setInterval(()=>{ if(gotText||!onPage(pid)) return; const o=$("evoOut"); if(o&&/^(Organizando|A IA não respondeu)/.test(o.textContent)) o.textContent=o.textContent.replace(/ · \d+ s$/,"")+" · "+Math.round((Date.now()-T0)/1000)+" s" },1000);
-    let r; try{ r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:"default",onText:({text})=>{gotText=true;renderOut(pid,tidyText(fillSlots(text,P.get(pid))),split,false)},
+    let r; try{ r=await sample(input,{signal:ctl.signal,cache:false,modelTier:$("optTier")?$("optTier").value:curTier(),onText:({text})=>{gotText=true;renderOut(pid,tidyText(fillSlots(text,P.get(pid))),split,false)},
       onRetry:(i,n)=>{if(onPage(pid)){$("evoOut").className="outtext placeholder thinking";$("evoOut").textContent="A IA não respondeu. Tentando de novo ("+i+" de "+n+")"}}}); } finally { clearInterval(tick) }
     r={...r,text:fixControls(impNoDash(tidyText(fillSlots(r.text,P.get(pid)))))};
     const so=splitOut(r.text,split);
@@ -1949,7 +1987,7 @@ async function runConnTest(box){
 }
 async function runApoioParallel(pid,sample){
   const p=clone(P.get(pid)); p.evo={...(p.evo||{}),out:"",alerts:""};
-  const r=await sample.json(apoioPrompt(p),{signal:ctl.signal,cache:false,modelTier:"default"});
+  const r=await sample.json(apoioPrompt(p),{signal:ctl.signal,cache:false,modelTier:curTier()});
   const itens=(r&&Array.isArray(r.itens)?r.itens:[]).filter(x=>x&&x.titulo).slice(0,12).map(x=>({id:uid36(),tipo:TIPOS[x.tipo]?x.tipo:"lembrar",prioridade:SEV[x.prioridade]?x.prioridade:"media",titulo:String(x.titulo),detalhe:String(x.detalhe||""),acao:String(x.acao||""),fonte:String(x.fonte||""),pubmed:String(x.pubmed||""),done:false}));
   save(pid,{apoio:{at:Date.now(),resumo:String((r&&r.resumo)||""),itens}},0);
   refreshTabs(pid);
@@ -2061,7 +2099,7 @@ function extractSugs(alerts){
 function planSection(t){
   const L=String(t||"").split("\n"); const pi=L.findIndex(l=>/^\s*\|?\s*#*\s*(Plano Terap[eê]utico|Plano|Conduta)\s*:?/i.test(l)); if(pi<0) return [];
   const out=[]; const first=L[pi].replace(/^\s*\|?\s*#*\s*(Plano Terap[eê]utico|Plano|Conduta)\s*:?\s*/i,"").trim(); if(first) out.push(first);
-  for(let j=pi+1;j<L.length;j++){ if(/^\s*\|\s*\S/.test(L[j])||/^\s*(Metas para alta|An[aá]lise Cr[ií]tica|={3})/i.test(L[j])) break; const s=L[j].replace(/^\s*[-•*]\s*/,"").trim(); if(s) out.push(s); }
+  for(let j=pi+1;j<L.length;j++){ if(/^\s*\|\s*\S/.test(L[j])||/^\s*(Metas para alta|An[aá]lise Cr[ií]tica|={3})/i.test(L[j])) break; if(/^\s*#*\s*(Metas e Pend|Planejamento de Alta|Metas Multidisciplinares)/i.test(L[j])) break; const s=L[j].replace(/^\s*[-•*]\s*/,"").trim(); if(s) out.push(s); }
   return out;
 }
 const planAlta=t=>planSection(t).some(l=>/\balta\b/i.test(l)&&!/previs[aã]o de alta|aguard|sem previs/i.test(l));
@@ -2080,7 +2118,8 @@ function planMissing(raw,out){
   const norm=s=>String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
   const STOP=new Set("para com sobre pelo pela paciente quadro apos ainda entre mais como cada esta este essa esse ja nao sem dos das".split(" "));
   const toks=s=>norm(s).split(/[^a-z0-9]+/).filter(w=>w.length>=4&&!STOP.has(w)).map(w=>w.slice(0,5));
-  const o=planSection(out).map(l=>new Set(toks(l))), oAll=new Set(o.flatMap(x=>[...x]));
+  const OL=String(out||"").split("\n"), oi=OL.findIndex(l=>/^\s*\|?\s*#*\s*(Plano Terap[eê]utico|Plano|Conduta)\s*:?/i.test(l));
+  const o=(oi<0?[]:OL.slice(oi+1)).filter(l=>l.trim()).map(l=>new Set(toks(l))), oAll=new Set(o.flatMap(x=>[...x]));
   return planSection(raw).filter(l=>{ const t=[...new Set(toks(l))]; if(t.length<2) return false;
     const best=Math.max(0,...o.map(S=>t.filter(w=>S.has(w)).length/t.length)); const all=t.filter(w=>oAll.has(w)).length/t.length;
     return best<0.35&&all<0.5; }).slice(0,8);
@@ -2088,11 +2127,11 @@ function planMissing(raw,out){
 function insertIntoPlan(evo,lines){
   if(!lines.length) return evo;
   const L=String(evo).split("\n");
-  const pi=L.findIndex(l=>/^\s*\|?\s*#*\s*Plano( Terap[eê]utico)?\s*:?\s*$/i.test(l)||/^\s*\|?\s*Plano Terap[eê]utico\s*:/i.test(l));
+  const pi=L.findIndex(l=>/^\s*\|?\s*#*\s*(Plano( Terap[eê]utico)?|Conduta)\s*:?\s*$/i.test(l)||/^\s*\|?\s*(Plano Terap[eê]utico|Conduta)\s*:/i.test(l));
   const add=lines.map(t=>"- "+t);
   if(pi<0) return String(evo).replace(/\s+$/,"")+"\n"+add.join("\n");
   let j=pi+1;
-  while(j<L.length&&!/^\s*\|\s*\S/.test(L[j])&&!/^\s*(Metas para alta|An[aá]lise Cr[ií]tica)/i.test(L[j])) j++;
+  while(j<L.length&&!/^\s*\|\s*\S/.test(L[j])&&!/^\s*#*\s*(Metas para alta|Metas e Pend|Planejamento de Alta|Metas Multidisciplinares|An[aá]lise Cr[ií]tica)/i.test(L[j])) j++;
   let k=j; while(k>pi+1&&!L[k-1].trim()) k--;
   L.splice(k,0,...add);
   return L.join("\n");
@@ -2116,7 +2155,7 @@ function sugCard(pid){
 // ===================== IMAGEM · PARECERES · ALTA =====================
 const ESPECIALIDADES=["Cardiologia","Cirurgia geral","Cirurgia vascular","Dermatologia","Endocrinologia","Gastroenterologia","Geriatria","Hematologia","Hepatologia","Infectologia","Nefrologia","Neurologia","Neurocirurgia","Nutrologia","Oftalmologia","Oncologia","Ortopedia","Otorrinolaringologia","Cuidados paliativos","Pneumologia","Proctologia","Psiquiatria","Reumatologia","Urologia","Ginecologia","Fisioterapia","Fonoaudiologia","Nutrição","Psicologia","Serviço social"];
 function espList(id){return h("datalist",{id},...ESPECIALIDADES.map(e=>h("option",{value:e})))}
-const curTier=()=>{try{return localStorage.getItem("evo.tier2")||"default"}catch(e){return "default"}};
+const curTier=()=>{try{return localStorage.getItem("evo.tier3")||"quick"}catch(e){return "quick"}};
 const pName=p=>[p.leito?"Leito "+p.leito:"",p.nome].filter(Boolean).join(" · ");
 const busyOps={};
 
@@ -3001,7 +3040,7 @@ async function runApoio(pid,sample,ownCtl){
   const onA=()=>openPid===pid&&tab==="apoio"&&$("apoioOut");
   if(onA()){$("apoioOut").textContent="";$("apoioOut").append(h("div",{class:"muted thinking",text:"Analisando o caso"}))}
   const sig=(ownCtl||ctl);
-  const r=await sample.json(apoioPrompt(p),{signal:sig?sig.signal:undefined,cache:false,modelTier:$("optTier")?$("optTier").value:"default"});
+  const r=await sample.json(apoioPrompt(p),{signal:sig?sig.signal:undefined,cache:false,modelTier:$("optTier")?$("optTier").value:curTier()});
   const itens=(r&&Array.isArray(r.itens)?r.itens:[]).filter(x=>x&&x.titulo).slice(0,12).map(x=>({id:uid36(),tipo:TIPOS[x.tipo]?x.tipo:"lembrar",prioridade:SEV[x.prioridade]?x.prioridade:"media",titulo:String(x.titulo),detalhe:String(x.detalhe||""),acao:String(x.acao||""),fonte:String(x.fonte||""),pubmed:String(x.pubmed||""),done:false}));
   save(pid,{apoio:{at:Date.now(),resumo:String((r&&r.resumo)||""),itens}},0);
   if(onA()) rerenderTab(pid);
