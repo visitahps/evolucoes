@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 04/11 (1)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 04/11 (3)</span></p>
 </div>
 
 <script>
@@ -240,7 +240,7 @@ Seu papel é atuar como médico assistente responsável pelo acompanhamento long
 
 Seu objetivo é receber informações clínicas em texto livre e transformá-las em uma evolução médica hospitalar técnica, natural, coerente, objetiva e pronta para prontuário eletrônico, preservando linguagem humana e padrão real de documentação hospitalar.
 
-A evolução deve soar como escrita manual de um médico hospitalista experiente em hospital real. O texto nunca deve parecer gerado por IA, parecer institucional ou discussão acadêmica.
+A evolução deve ter o estilo de prontuário de um médico hospitalista experiente: direto e prático, sem tom institucional nem de discussão acadêmica.
 
 Priorize:
 * naturalidade clínica
@@ -445,7 +445,7 @@ Evolução:
 * Preservar padrão real de evolução hospitalar
 * Priorizar evolução temporal do quadro
 * Integrar exames e resposta terapêutica
-* Evitar aparência automatizada
+* Evitar frases prontas e repetitivas
 * Evitar texto excessivamente narrativo
 * Manter linguagem objetiva e pragmática
 * Não explicar excessivamente achados simples
@@ -501,11 +501,11 @@ Gerar apenas quando houver relevância clínica plausível:
 6. Riscos assistenciais relevantes
 
 INSTRUÇÃO FINAL:
-Atue como um médico hospitalista experiente de enfermaria clínica acompanhando pacientes reais em hospital geral, priorizando naturalidade clínica, pragmatismo assistencial, proporcionalidade terapêutica, coerência documental e plausibilidade prática acima de sofisticação textual. O texto deve soar humano, orgânico e compatível com evolução médica real de rotina hospitalar diária, sem aparência de texto gerado por IA.` },
+Atue como um médico hospitalista experiente de enfermaria clínica acompanhando pacientes reais em hospital geral, priorizando naturalidade clínica, pragmatismo assistencial, proporcionalidade terapêutica, coerência documental e plausibilidade prática acima de sofisticação textual. O texto deve ter o estilo direto da evolução médica de rotina hospitalar diária, sem frases prontas.` },
 
 { id:"alta", group:ENF, analise:false, name:"Resumo de alta", text:
 `Realizar resumo de alta, de forma discursiva com evolução dos eventos desde chegada em PS e evolução em enfermaria até a alta, bem como realizar receitas para alta, orientações dietéticas, orientações gerais e sinais de alarme para retorno em PS.
-Realizar conforme o seguinte modelo: linguagem simples, não mecânica, sem parecer artificial feito por IA. Não utilizar travessão, apenas hífen.
+Realizar conforme o seguinte modelo: linguagem simples, não mecânica, sem frases prontas. Não utilizar travessão, apenas hífen.
 
 RESUMO DE ALTA HOSPITALAR: ENFERMARIA DE CLÍNICA MÉDICA
 
@@ -552,7 +552,7 @@ Orientações breves de dieta, exercícios, retorno a ambulatório` },
 - Não use travessão, apenas hífen.` },
 
 { id:"parecer", group:ENF, analise:false, name:"Solicitação de parecer", text:
-`Redija uma solicitação de parecer (interconsulta) para a especialidade pedida, como escrita por um médico hospitalista de enfermaria de clínica médica. Linguagem médica simples e natural, não mecânica, sem parecer feita por IA. Não utilizar travessão, apenas hífen.
+`Redija uma solicitação de parecer (interconsulta) para a especialidade pedida, como escrita por um médico hospitalista de enfermaria de clínica médica. Linguagem médica simples e natural, não mecânica, sem frases prontas. Não utilizar travessão, apenas hífen.
 
 Modelo:
 SOLICITAÇÃO DE PARECER: [Especialidade]
@@ -594,7 +594,7 @@ Linguagem simples, sem termos muito técnicos para o paciente. Não utilizar tra
 Na análise para o médico: doses a conferir, ajuste para função renal ou hepática, interações relevantes, duplicidades e medicamentos que exigem receita especial.` },
 
 { id:"encaminhamento", group:ENF, analise:false, name:"Encaminhamento", text:
-`Redija um encaminhamento para ambulatório de especialista após a alta hospitalar, em linguagem médica simples e natural, sem parecer feita por IA. Não utilizar travessão, apenas hífen.
+`Redija um encaminhamento para ambulatório de especialista após a alta hospitalar, em linguagem médica simples e natural, sem frases prontas. Não utilizar travessão, apenas hífen.
 
 Modelo:
 ENCAMINHAMENTO
@@ -680,7 +680,7 @@ EXAME PSÍQUICO - breve, em linha corrida
 HIPÓTESE DIAGNÓSTICA - critérios do DSM-5, com CID
 CONDUTA
 
-Estilo: linguagem simples e natural, como um médico escreve no prontuário; nada que pareça técnico demais ou feito por IA. Não inventar dados.
+Estilo: linguagem simples e natural, como um médico escreve no prontuário; nada técnico demais nem com frases prontas. Não inventar dados.
 
 Conduta: em tópicos curtos, em primeira pessoa (mantenho, prescrevo, oriento, ajusto, solicito), com fármaco e posologia, ajustes ou trocas das medicações em uso. Indicar destino: permanência no CAPS com PTS (conforme diretrizes nacionais da RAPS) ou seguimento ambulatorial (ex.: UBS).
 
@@ -706,7 +706,7 @@ EXAME PSÍQUICO - breve, em linha corrida
 HIPÓTESE DIAGNÓSTICA - critérios do DSM-5, com CID
 CONDUTA
 
-Estilo: linguagem simples e natural, como um médico escreve no prontuário; nada que pareça técnico demais ou feito por IA. Não inventar dados.
+Estilo: linguagem simples e natural, como um médico escreve no prontuário; nada técnico demais nem com frases prontas. Não inventar dados.
 
 Conduta: em tópicos curtos, em primeira pessoa (mantenho, prescrevo, oriento, ajusto, solicito), com fármaco e posologia, ajustes ou trocas das medicações em uso, articulação com a psicoterapia e prazo de retorno.
 
@@ -805,8 +805,8 @@ async function prepImage(blob){
   }catch(e){ throw {code:"image_rejected"} }
 }
 const CACHE_CUT="<<<FIM_DA_PARTE_FIXA>>>";
-const USE_CTX="CONTEXTO DE USO: este pedido vem do Organizador de Evoluções, ferramenta de documentação usada pelo próprio médico assistente, responsável pelo paciente. Ele examinou o paciente, escreveu ou colou os dados abaixo a partir do prontuário e revisa e assina tudo antes de usar. Sua tarefa é organizar e revisar o texto dele e apontar pontos para ele avaliar; é apoio à documentação, a decisão é dele. Faça a tarefa pedida, no formato pedido. Não recuse, não troque a resposta por aviso e não sugira que ele preencha sozinho; se algo parecer arriscado ou duvidoso, diga isso na análise.";
-function looksRefusal(t){ const s=String(t||"").slice(0,900); return s.length>0&&/n[aã]o (posso|consigo|vou) (produzir|gerar|ajudar|fazer|elaborar|criar|redigir|escrever)|preciso ser diret[oa]|n[aã]o tenho como validar|n[aã]o sou o profissional|I can(no|')t (help|produce|create|write)/i.test(s)&&!/^\s*\|/m.test(s.slice(0,300)); }
+const USE_CTX="CONTEXTO DE USO: este pedido vem do Organizador de Evoluções, ferramenta de documentação usada pelo próprio médico assistente, responsável pelo paciente. Ele examinou o paciente, escreveu ou colou os dados abaixo a partir do prontuário e revisa e assina tudo antes de usar. Sua tarefa é organizar e revisar o texto dele e apontar pontos para ele avaliar; é apoio à documentação, a decisão é dele. O texto que você gera é um rascunho: o médico confere tudo à beira leito, corrige e assina, e nada vai ao prontuário sem a revisão dele. As regras de estilo são só preferências de redação dele (frases curtas, abreviações dele). Faça a tarefa pedida, no formato pedido. Não recuse, não troque a resposta por aviso e não sugira que ele preencha sozinho; se algo parecer arriscado ou duvidoso, diga isso na análise.";
+function looksRefusal(t){ const s=String(t||"").slice(0,900); return s.length>0&&/n[aã]o (posso|consigo|vou) (produzir|gerar|ajudar|fazer|elaborar|criar|redigir|escrever)|preciso ser diret[oa]|posso ajudar de outras formas|n[aã]o tenho como validar|n[aã]o sou o profissional|I can(no|')t (help|produce|create|write)/i.test(s)&&!/^\s*\|/m.test(s.slice(0,300)); }
 function toMessages(input,imgs){ const out=toMessagesRaw(input,imgs); let used=false;
   { const f=out.find(m=>m.role==="user"); if(f){ if(typeof f.content==="string") f.content=USE_CTX+"\n\n"+f.content; else { const tb=f.content.find(b=>b.type==="text"); if(tb) tb.text=USE_CTX+"\n\n"+tb.text; } } }
   out.forEach(m=>{ if(used||typeof m.content!=="string") return; const i=m.content.indexOf(CACHE_CUT); if(i<0) return; used=true;
@@ -947,7 +947,9 @@ Metas Multidisciplinares:
 * Enfermagem: meta; Prazo
 * Área sem meta no caso: registrar de forma explícita
 `;
-function migrateEvoTpl(arr){ arr.forEach(t=>{ if(t&&t.id==="evolucao"&&typeof t.text==="string") t.text=t.text.replace(/Plano Terap[eê]utico:\n\* Condutas objetivas[\s\S]*?\* Planejamento seguro de transi[cç][aã]o de cuidado\n/,EVO_NEW_PLAN) }); return arr }
+const TPL_PHR=[["A evolução deve soar como escrita manual de um médico hospitalista experiente em hospital real. O texto nunca deve parecer gerado por IA, parecer institucional ou discussão acadêmica.", "A evolução deve ter o estilo de prontuário de um médico hospitalista experiente: direto e prático, sem tom institucional nem de discussão acadêmica."], ["* Evitar aparência automatizada", "* Evitar frases prontas e repetitivas"], ["O texto deve soar humano, orgânico e compatível com evolução médica real de rotina hospitalar diária", "O texto deve ter o estilo direto da evolução médica de rotina hospitalar diária"], [", sem parecer artificial feito por IA", ", sem frases prontas"], [", sem parecer feita por IA", ", sem frases prontas"], ["; nada que pareça técnico demais ou feito por IA", "; nada técnico demais nem com frases prontas"]];
+function migrateEvoTpl(arr){ arr.forEach(t=>{ if(t&&typeof t.text==="string") TPL_PHR.forEach(([a,b])=>{t.text=t.text.split(a).join(b)}); });
+  arr.forEach(t=>{ if(t&&t.id==="evolucao"&&typeof t.text==="string") t.text=t.text.replace(/Plano Terap[eê]utico:\n\* Condutas objetivas[\s\S]*?\* Planejamento seguro de transi[cç][aã]o de cuidado\n/,EVO_NEW_PLAN) }); return arr }
 function mergeDefaults(arr){ migrateEvoTpl(arr);const ids=new Set(arr.map(t=>t.id));DEFAULTS.forEach(d=>{if(!ids.has(d.id))arr.push({...d})});return arr}
 templates=mergeDefaults(templates);
 const tpl=id=>templates.find(t=>t.id===id)||DEFAULTS.find(t=>t.id===id);
@@ -1635,14 +1637,14 @@ function patientContext(p){
 const EVO_RULES=split=>`
 REGRAS DO MÉDICO PARA A EVOLUÇÃO (ele revisa e valida tudo antes de assinar; o objetivo é poupar tempo):
 - Hipóteses diagnósticas: ajuste sempre que a evolução, os exames, os pareceres ou uma inconsistência pedirem. Pode reordenar, refinar (ex.: ITU para pielonefrite aguda quando os dados sustentarem), marcar como resolvida ou em resolução e acrescentar hipótese nova quando houver dado que a sustente.${split?` Diga na análise, depois de ${MARK}, o que mudou na lista de hipóteses e por quê.`:""}
-- Exame físico: nunca escreva "não feito", "não mencionado", "não visto", "não checado", "não avaliado", "sem informação" ou equivalentes. Use os achados de hoje (exame marcado e texto colado); para o que não veio hoje, mantenha a descrição do exame físico da evolução anterior, ajustando ao quadro atual, ou omita a linha.${split?` Na análise, liste em uma linha os itens do exame físico repetidos da evolução anterior, para o médico confirmar à beira leito.`:""}
+- Exame físico: nunca escreva "não feito", "não mencionado", "não visto", "não checado", "não avaliado", "sem informação" ou equivalentes. Use os achados de hoje (exame marcado e texto colado); para o que não veio hoje, traga a descrição da evolução anterior como rascunho para o médico confirmar à beira leito antes de assinar, ou omita a linha; na análise, diga quais itens vieram da evolução anterior.${split?` Na análise, liste em uma linha os itens do exame físico repetidos da evolução anterior, para o médico confirmar à beira leito.`:""}
 - Plano terapêutico e conduta em primeira pessoa: mantenho, ajusto, prescrevo, suspendo, inicio, solicito, aguardo, oriento.
 - Formato: coloque "| " antes de cada título de seção (ex.: "| Hipóteses Diagnósticas:", "| Exames Complementares:"), como no texto do médico.
 - Campos que o texto colado preenche (procedência, HPMA, culturas, especialidades) se mantêm; atualize, não apague.
 - Exames laboratoriais: uma linha por data ("- DD/MM: ..."), gasometria em linha própria logo abaixo, só a primeira letra maiúscula nos nomes e siglas como estão (PCR, INR, TAP, pH, pO2). Use os MESMOS nomes em todas as datas, inclusive nos exames que vierem do texto colado: Leuc, Hb, Ht, Plq, Creat, Ur, Na, K, Ca, Mg, Cl, P, PCR, INR, TAP, TTPA, Glic, BT, BD, TGO, TGP, FA, GGT, Alb, Lactato (troque Cr por Creat, Leuco por Leuc, Plaq por Plq, RNI por INR, Glicose por Glic). Números sem ponto de milhar (12280, 212000) e com vírgula decimal (1,7).
 - Plano terapêutico: mantenha as linhas que o médico escreveu, cada uma na sua linha, apenas em primeira pessoa e com grafia corrigida; não junte em parágrafo. Cada linha começa pelo verbo e cabe numa linha só (ex.: "- Mantenho ceftriaxona, D4", "- Solicito Hb amanhã"), sem justificativa: o porquê vai na análise. Não acrescente condutas de rotina que o médico não escreveu.
 
-ESTILO (o mais importante): o texto tem que parecer escrito à mão por um hospitalista apressado no fim da visita, nunca por IA.
+ESTILO (o mais importante): estilo de prontuário do próprio médico, enxuto e direto, sem frases prontas e sem floreios.
 - Copie o jeito de escrever do próprio médico no texto colado: as abreviações dele (BEG, AAA, MV+, RHA+, ATB, EV, VO, s/n, HD), o tamanho das frases, a pontuação. Frases curtas, diretas, estilo de prontuário, podendo ser telegráficas.
 - Tamanho: a evolução final deve ter tamanho parecido com a que foi colada, nunca bem maior. Seção Evolução: o parágrafo de abertura mais 2 a 5 tópicos no caso estável; mais só se houve intercorrência.
 - Os tópicos com "*" e as listas das instruções do médico são o que considerar, não itens obrigatórios: escreva só o que tiver conteúdo real para este paciente hoje. Não preencha seção com frase genérica. 
@@ -1664,7 +1666,7 @@ SEÇÕES FINAIS DA EVOLUÇÃO (obrigatórias, nesta ordem, cada título com "| "
 - Área sem meta neste caso: escreva explicitamente, com o motivo curto: "- Fonoaudiologia: sem meta no momento, deglutição sem alteração e dieta VO". Nunca deixe área em branco nem omita.
 - Enfermagem: riscos e cuidados reais deste paciente (queda, LPP com mudança de decúbito, flebite, broncoaspiração, glicemia capilar), de forma enxuta.
 - Proibido: "além disso", "vale ressaltar", "cabe destacar", "nesse contexto", "diante do exposto", "em suma", "de forma favorável", "mantém-se em acompanhamento", "segue em acompanhamento multidisciplinar", "quadro clínico estável do ponto de vista", "a ser reavaliado conforme evolução", adjetivos de enfeite e explicações do óbvio.
-- Nunca escreva no prontuário o que falta ou não foi encontrado (ex.: "labs de hoje não disponíveis", "sem ECO recente encontrado", "aguardo exames para confirmar"); isso vai para a análise ou para uma linha objetiva do plano ("- Solicito ECOTT").
+- Nunca escreva no prontuário o que falta ou não foi encontrado (ex.: "labs de hoje não disponíveis", "sem ECO recente encontrado", "aguardo exames para confirmar"); isso vai para a análise, que o médico lê antes de assinar, ou para uma linha objetiva do plano ("- Solicito ECOTT").
 - Não repita a mesma informação em seções diferentes (ex.: exame já citado nos exames não precisa ser recontado na evolução; cite só o que mudou ou importa).
 ${split?`- Depois da linha ${MARK} (fica fora do prontuário), faça a análise crítica de um hospitalista sênior que revisa o caso com o colega: não seja complacente, aponte o que ele pode não ter pensado e seja específico para ESTE paciente (nada genérico que valeria para qualquer internado). Use só os blocos que tiverem conteúdo, nesta ordem, em tópicos curtos com hífen:
   INCONSISTÊNCIAS: dados que se contradizem, erro de copiar e colar, hipótese sem dado que sustente.
@@ -1767,8 +1769,15 @@ function impNoDash(t){
     let s=L[k].replace(/^\s*-\s+/,"").trim().replace(/[;,.]\s*$/,""); L[k]=s.charAt(0).toUpperCase()+s.slice(1)+"."; }
   return L.join("\n");
 }
+function imgShort(x){
+  let t=String(x.texto||"").replace(/\r/g,"").split("\n").map(l=>l.replace(/^\s*[-•*–—]\s*/,"").trim()).filter(Boolean).map(l=>/[.:;]$/.test(l)?l:l+".").join(" ").replace(/\s+/g," ").replace(/:\./g,":").trim();
+  const c=t.match(/\b(conclus[aã]o|impress[aã]o(?: diagn[oó]stica)?|opini[aã]o)\s*:\s*(.+)$/i); if(c&&c[2].length>20) t=c[2];
+  if(t.length>450){ const cut=t.slice(0,450), i=cut.lastIndexOf(". "); t=(i>200?cut.slice(0,i+1):cut.replace(/\s+\S*$/,"")+"...")+" (laudo completo na aba Imagem)"; }
+  return "- "+(x.date?fmtDMY(x.date)+" ":"")+(x.exame?x.exame+": ":"")+t;
+}
+function imgsSlot(p,n){const l=(p.imgs||[]).slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));return (n?l.slice(-n):l).map(imgShort).join("\n")}
 function fillSlots(text,p){
-  const ev=p.evo||{}, sl=ssvvClean(ev.ssvvLine), lc=labsContext(p,3), ic=imgsContext(p,6).split("\n").filter(Boolean).map(l=>"- "+l).join("\n");
+  const ev=p.evo||{}, sl=ssvvClean(ev.ssvvLine), lc=labsContext(p,3), ic=imgsSlot(p,6);
   return String(text)
     .replace(/^[ \t-]*\[\[\s*LABS\s*\]\][ \t]*$/gm,lc||"").replace(/\[\[\s*LABS\s*\]\]/g,lc||"")
     .replace(/^[ \t-]*\[\[\s*IMAGEM\s*\]\][ \t]*$/gm,ic||"").replace(/\[\[\s*IMAGEM\s*\]\]/g,ic||"")
@@ -1791,7 +1800,7 @@ Responda apenas com JSON, neste formato:
 {"tendencia": "melhora" | "piora" | "estavel" | "indeterminado", "impressao": "texto"}
 
 Regras para "impressao":
-- 2 a 4 frases curtas, linguagem natural de prontuário, sem parecer texto de IA.
+- 2 a 4 frases curtas, linguagem natural de prontuário, sem frases prontas.
 - Comece pela síntese do caso (perfil do paciente, problema principal, dia de internação ou de antibiótico quando houver).
 - Diga se está em melhora, piora ou estável e em que se baseia: clínica, sinais vitais e exames comparados com a admissão ou dias anteriores.
 - Termine com o foco do dia.
@@ -2180,7 +2189,7 @@ async function streamDoc(o){
   if(o.al) o.al.hidden=true;
   const T0=Date.now(); let got=false;
   const tick=setInterval(()=>{if(!got&&o.st.isConnected)o.st.textContent="Escrevendo · "+Math.round((Date.now()-T0)/1000)+" s"},1000);
-  const show=t=>{t=tidyText(t); const s=splitOut(t,!!o.split); if(o.out&&o.out.isConnected){o.out.className="outtext";o.out.textContent=s.evo} if(o.al&&o.al.isConnected){o.al.hidden=!s.alerts;o.alt.textContent=s.alerts} return s};
+  const show=t=>{t=tidyText(t); try{ const pp=o.pid&&P.get(o.pid); if(pp) t=fillSlots(t,pp); else t=t.replace(/^[ \t-]*\[\[\s*(LABS|IMAGEM|CONTROLES)\s*\]\][ \t]*\n?/gm,""); }catch(e){} const s=splitOut(t,!!o.split); if(o.out&&o.out.isConnected){o.out.className="outtext";o.out.textContent=s.evo} if(o.al&&o.al.isConnected){o.al.hidden=!s.alerts;o.alt.textContent=s.alerts} return s};
   try{
     const r=await sample(o.prompt,{cache:false,modelTier:o.tier||curTier(),onText:({text})=>{got=true;show(text)}});
     const s=show(r.text);
@@ -2324,7 +2333,7 @@ function parecerTab(pid){
   go.onclick=async()=>{
     const e=esp.value.trim(), m=mot.value.trim();
     if(!e||!m){oc.st.className="status err";oc.st.textContent="Preencha a especialidade e o motivo.";return}
-    const r=await streamDoc({btns:[go],out:oc.out,st:oc.st,ok:"Solicitação pronta e salva. Copie para o sistema do hospital.",empty:"A solicitação aparece aqui.",
+    const r=await streamDoc({pid:typeof pid!=="undefined"?pid:null,btns:[go],out:oc.out,st:oc.st,ok:"Solicitação pronta e salva. Copie para o sistema do hospital.",empty:"A solicitação aparece aqui.",
       prompt:docPrompt("parecer",P.get(pid),[fullContext(P.get(pid),{imp:false}),
         (P.get(pid).imgs||[]).length?"EXAMES DE IMAGEM:\n"+imgsContext(P.get(pid)):"",
         (P.get(pid).pareceres||[]).length?"PARECERES JÁ SOLICITADOS NESTA INTERNAÇÃO:\n"+pareceresContext(P.get(pid)):"",
@@ -2383,13 +2392,13 @@ function altaTab(pid){
     a.info?"INFORMAÇÕES ADICIONAIS DO MÉDICO PARA A ALTA:\n"+a.info:"",
     a.meds?"MEDICAÇÕES PARA CASA INDICADAS PELO MÉDICO (prevalecem sobre qualquer outra fonte):\n"+a.meds:""]};
   bRes.onclick=async()=>{
-    const r=await streamDoc({btns:[bRes,bRec],out:res.out,st:res.st,ok:"Resumo de alta pronto e salvo.",empty:"O resumo de alta aparece aqui.",
+    const r=await streamDoc({pid:typeof pid!=="undefined"?pid:null,btns:[bRes,bRec],out:res.out,st:res.st,ok:"Resumo de alta pronto e salvo.",empty:"O resumo de alta aparece aqui.",
       prompt:docPrompt("alta",P.get(pid),[...ctxBlocks(),"NESTA TAREFA: escreva o resumo de alta com as orientações de alta e os sinais de alarme. A receita é feita à parte, no campo Receita para casa: no resumo, cite apenas as medicações da alta de forma breve dentro do plano."],false)});
     if(r&&r.main) save(pid,{alta:{resumo:r.main,resumoAt:Date.now()}},0);
   };
   bRec.onclick=async()=>{
     const q=P.get(pid);
-    const r=await streamDoc({btns:[bRes,bRec],out:rec.out,al:rec.al,alt:rec.alt,split:true,st:rec.st,ok:"Receita pronta e salva. Confira doses antes de entregar.",empty:"A receita aparece aqui.",
+    const r=await streamDoc({pid:typeof pid!=="undefined"?pid:null,btns:[bRes,bRec],out:rec.out,al:rec.al,alt:rec.alt,split:true,st:rec.st,ok:"Receita pronta e salva. Confira doses antes de entregar.",empty:"A receita aparece aqui.",
       prompt:docPrompt("receita",q,[...ctxBlocks(),(q.alta||{}).resumo?"RESUMO DE ALTA JÁ ESCRITO:\n"+q.alta.resumo:""],true)});
     if(r&&r.main) save(pid,{alta:{receita:r.main,receitaAlerts:r.alerts||"",receitaAt:Date.now()}},0);
   };
@@ -2420,7 +2429,7 @@ function encCard(pid){
     const e=esp.value.trim(), m=mot.value.trim();
     if(!e||!m){st.className="status err";st.textContent="Preencha a especialidade e o motivo.";return}
     const q=P.get(pid);
-    const r=await streamDoc({btns:[go],out,st,ok:"Encaminhamento pronto e salvo.",empty:"",
+    const r=await streamDoc({pid:typeof pid!=="undefined"?pid:null,btns:[go],out,st,ok:"Encaminhamento pronto e salvo.",empty:"",
       prompt:docPrompt("encaminhamento",q,[fullContext(q,{imp:false}),(q.imgs||[]).length?"EXAMES DE IMAGEM:\n"+imgsContext(q):"",(q.pareceres||[]).length?"PARECERES:\n"+pareceresContext(q):"",
         (q.alta||{}).resumo?"RESUMO DE ALTA:\n"+q.alta.resumo:"",(q.alta||{}).receita?"RECEITA DE ALTA:\n"+q.alta.receita:"",
         `PEDIDO DO MÉDICO:\nEspecialidade: ${e}\nMotivo: ${m}`],false)});
@@ -2508,7 +2517,7 @@ Seja específico para ESTE paciente; evite recomendações genéricas que valeri
 
 DADOS DO PACIENTE:
 ${racioContext(q)}`;
-    const r=await streamDoc({btns:[go],out:oc.out,st:oc.st,tier:tier.value,ok:"Discussão pronta e salva.",empty:"",prompt});
+    const r=await streamDoc({pid:typeof pid!=="undefined"?pid:null,btns:[go],out:oc.out,st:oc.st,tier:tier.value,ok:"Discussão pronta e salva.",empty:"",prompt});
     if(r&&r.main) save(pid,{racio:{text:r.main,at:Date.now(),focus:f}},0);
   };
   g.append(h("div",{class:"stack"},
