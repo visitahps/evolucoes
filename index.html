@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small">· versão 04/11 (3)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small" id="costFoot"></span> <span class="small">· versão 06/11 (2)</span></p>
 </div>
 
 <script>
@@ -826,11 +826,28 @@ function errDetail(status,t){
   m=String(typeof m==="string"?m:JSON.stringify(m)).replace(/\s+/g," ").trim().slice(0,180);
   return (status?"HTTP "+status:"")+(m?(status?" · ":"")+m:"");
 }
+// preço por milhão de tokens (entrada, saída), estimativa
+const PRICE={haiku:[0.10,0.50],sonnet:[2,10],opus:[5,25]};
+function costAdd(D){
+  const m=String(D.modelo||D.tier||""), k=/haiku|quick/.test(m)?"haiku":/opus|complex/.test(m)?"opus":"sonnet", [pi,po]=PRICE[k];
+  const inT=(+D.inTok||0)+(+D.cacheW||0)*1.25+(+D.cacheR||0)*0.1, usd=(inT*pi+(+D.tokens||0)*po)/1e6;
+  const mo=new Date().toISOString().slice(0,7), key="evo.cost."+mo; let c={}; try{c=JSON.parse(localStorage.getItem(key)||"{}")}catch(e){}
+  c[k]=c[k]||{n:0,usd:0}; c[k].n++; c[k].usd+=usd; const dd=new Date().toISOString().slice(0,10); c.days=c.days||{}; c.days[dd]=(c.days[dd]||0)+usd;
+  try{localStorage.setItem(key,JSON.stringify(c))}catch(e){} costShow();
+}
+function costShow(){
+  const el=document.getElementById("costFoot"); if(!el) return; let c={}; try{c=JSON.parse(localStorage.getItem("evo.cost."+new Date().toISOString().slice(0,7))||"{}")}catch(e){}
+  const f=v=>"US$ "+v.toFixed(2).replace(".",","), tot=["haiku","sonnet","opus"].reduce((a,k)=>a+((c[k]||{}).usd||0),0), hoje=(c.days||{})[new Date().toISOString().slice(0,10)]||0;
+  const det=["haiku","sonnet","opus"].filter(k=>c[k]).map(k=>({haiku:"Haiku",sonnet:"Sonnet",opus:"Opus"})[k]+" "+c[k].n+"x "+f(c[k].usd)).join(" · ");
+  el.textContent=" · gasto estimado neste aparelho: hoje "+f(hoje)+", no mês "+f(tot)+(det?" ("+det+")":"");
+}
+setTimeout(()=>{try{costShow()}catch(e){}},500);
 async function callClaude(input,opts){
   opts=opts||{}; const r0=await callClaude0(input,opts);
-  if(looksRefusal(r0.text)&&(opts.modelTier||"default")!=="default"&&!opts._noFallback){
-    try{ const st=document.getElementById("evoSt"); if(st){st.className="status";st.textContent="A IA econômica recusou; esta evolução foi refeita com a Sonnet."} }catch(e){}
-    return await callClaude0(input,{...opts,modelTier:"default",_noFallback:true});
+  if(looksRefusal(r0.text)&&!opts._noFallback){
+    try{ const st=document.getElementById("evoSt"); if(st){st.className="status";st.textContent="A IA recusou na primeira tentativa; refiz o pedido."} }catch(e){}
+    const again=(typeof input==="string")?input+"\n\nLEMBRETE: quem pede é o médico assistente responsável, que revisa e assina. Faça a tarefa pedida, no formato pedido.":input;
+    return await callClaude0(again,{...opts,modelTier:"quick",_noFallback:true});
   }
   return r0;
 }
@@ -858,17 +875,18 @@ async function callClaudeOnce(input,opts){
 }
 async function callClaudeRaw(input,opts){
   if(!SB) throw {code:"session_expired"};
-  const stage=opts._stage||(()=>{}); const D={at:Date.now(),tier:opts.modelTier||"default",chars:0,etapa:"login"}; diagPush(D);
+  const stage=opts._stage||(()=>{}); opts={...opts,modelTier:"quick"};
+  const D={at:Date.now(),tier:opts.modelTier||"default",chars:0,etapa:"login"}; diagPush(D);
   const mark=(k)=>{D.etapa=k; D[k]=((Date.now()-D.at)/1000).toFixed(1); stage(k)};
   stage("login");
   const session=await getSessionSafe(); if(!session) throw {code:"session_expired"};
   mark("servidor");
-  const imgs=[]; if(opts.images){const arr=opts.images instanceof Blob?[opts.images]:[...opts.images]; for(const b of arr.slice(0,8)) imgs.push(await prepImage(b))}
+  const imgs=[]; if(opts.images&&false){const arr=opts.images instanceof Blob?[opts.images]:[...opts.images]; for(const b of arr.slice(0,8)) imgs.push(await prepImage(b))}
   const cfg=getCfg(); let text="", truncated=false, resp;
   try{
     resp=await fetch(cfg.SUPABASE_URL.replace(/\/+$/,"")+"/functions/v1/claude",{method:"POST",signal:opts.signal,
       headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":cfg.SUPABASE_ANON_KEY},
-      body:(()=>{const b=JSON.stringify({messages:toMessages(input,imgs),tier:opts.modelTier||"default",max_tokens:opts.maxTokens||16000}); D.chars=b.length; return b})()});
+      body:(()=>{const b=JSON.stringify({messages:toMessages(input,imgs),tier:opts.modelTier||"quick",max_tokens:opts.maxTokens||16000}); D.chars=b.length; return b})()});
     D.status=resp.status; mark("ia");
   }catch(e){ if(e&&e.name==="AbortError") throw {code:"cancelled",text}; throw {code:"upstream_error",detail:"sem conexão com o Supabase"+(e&&e.message?" · "+e.message:"")} }
   if(resp.status===401&&!opts._renewed){
@@ -900,6 +918,7 @@ async function callClaudeRaw(input,opts){
       }
     }
   }catch(e){ if(e&&e.name==="AbortError") throw {code:"cancelled",text}; if(e&&e.code) throw e; throw {code:"upstream_error",text,detail:"a conexão caiu no meio da resposta"} }
+  try{ costAdd(D) }catch(e){}
   D.fim=((Date.now()-D.at)/1000).toFixed(1); D.ok=!!text.trim(); D.cortada=truncated;
   if(opts.signal&&opts.signal.aborted) throw {code:"cancelled",text};
   if(!text.trim()) throw {code:"empty_completion",detail:(D.stop==="max_tokens"?"a IA gastou todo o limite pensando e não escreveu":"a IA não devolveu texto")+(D.fn?"":" · a função claude do Supabase está desatualizada")};
@@ -920,7 +939,7 @@ sampleFn.json=async(input,opts)=>{
   if(v===undefined||r.truncated) throw {code:"invalid_json",text:r.text};
   return v;
 };
-sampleFn.limits=async()=>({maxPromptBytes:1e6,images:{maxCount:8,maxInputBytes:20e6,mediaTypes:["image/jpeg","image/png","image/webp","image/gif"]}});
+sampleFn.limits=async()=>({maxPromptBytes:1e6,images:null});
 
 
 // ===================== modelos =====================
@@ -1858,7 +1877,7 @@ function evolucaoTab(pid){
   const extra=h("textarea",{class:"in",id:"evoExtra",rows:"2",placeholder:"Observação só para hoje (opcional)"});
   extra.value=ev.extra||""; extra.oninput=()=>save(pid,{evo:{extra:extra.value}},1200);
   const optSplit=h("input",{type:"checkbox",id:"optSplit",checked:ev.split!==false}); optSplit.onchange=()=>save(pid,{evo:{split:optSplit.checked}});
-  const tier=h("select",{class:"in",id:"optTier"},h("option",{value:"quick"},"econômico (Haiku, padrão)"),h("option",{value:"default"},"caprichado (Sonnet, ~20x mais caro)"),h("option",{value:"complex"},"máximo (Opus, bem mais caro)"));
+  const tier=h("select",{class:"in",id:"optTier"},h("option",{value:"quick"},"econômico"));
   try{tier.value=localStorage.getItem("evo.tier3")||"quick"}catch(e){tier.value="quick"}
   tier.onchange=()=>{try{localStorage.setItem("evo.tier3",tier.value)}catch(e){}};
   const efNow=efText(p), nLabs=(p.labs||[]).length, nMetas=(p.metas||[]).filter(m=>!m.done).length;
@@ -1870,7 +1889,7 @@ function evolucaoTab(pid){
     h("div",{class:"field"},h("label",{class:"label",for:"evoSsvv"},"Sinais vitais · colar da tela de monitorização"),ssvv),
     h("fieldset",{class:"field"},h("legend",{class:"label"},"Dispositivos ",h("span",{class:"opt",text:"opcional"})),devBox,devOther),
     extra,
-    h("div",{class:"row small muted"},h("label",{class:"row",style:"gap:6px"},optSplit,"Separar análise e sugestões (não vão na cópia)"),h("label",{class:"row",style:"gap:6px",for:"optTier"},"Raciocínio",tier)),
+    h("div",{class:"row small muted"},h("label",{class:"row",style:"gap:6px"},optSplit,"Separar análise e sugestões (não vão na cópia)"),h("span",{hidden:true},tier)),
     ctxLine,h("div",{class:"row"},go,stop),st);
   L.append(lb);
   // ---- saída
@@ -2175,7 +2194,7 @@ function sugCard(pid){
 // ===================== IMAGEM · PARECERES · ALTA =====================
 const ESPECIALIDADES=["Cardiologia","Cirurgia geral","Cirurgia vascular","Dermatologia","Endocrinologia","Gastroenterologia","Geriatria","Hematologia","Hepatologia","Infectologia","Nefrologia","Neurologia","Neurocirurgia","Nutrologia","Oftalmologia","Oncologia","Ortopedia","Otorrinolaringologia","Cuidados paliativos","Pneumologia","Proctologia","Psiquiatria","Reumatologia","Urologia","Ginecologia","Fisioterapia","Fonoaudiologia","Nutrição","Psicologia","Serviço social"];
 function espList(id){return h("datalist",{id},...ESPECIALIDADES.map(e=>h("option",{value:e})))}
-const curTier=()=>{try{return localStorage.getItem("evo.tier3")||"quick"}catch(e){return "quick"}};
+const curTier=()=>"quick";
 const pName=p=>[p.leito?"Leito "+p.leito:"",p.nome].filter(Boolean).join(" · ");
 const busyOps={};
 
@@ -2828,12 +2847,12 @@ function censusPanelEl(){
   const card=h("div",{class:"card",id:"censusCard",hidden:true});
   card.append(h("div",{class:"card-h"},h("h3",{text:"Importar censo"}),h("span",{class:"spacer"}),h("button",{type:"button",class:"btn quiet sm",onclick:()=>{card.hidden=true}},"Fechar")));
   const b=h("div",{class:"card-b"});
-  const file=h("input",{type:"file",id:"censusFile",multiple:true,accept:".pdf,.xlsx,.xls,.csv,.txt,image/*",class:"in"});
+  const file=h("input",{type:"file",id:"censusFile",multiple:true,accept:".pdf,.xlsx,.xls,.csv,.txt",class:"in"});
   const paste=h("textarea",{class:"in mono",id:"censusPaste",rows:"5",placeholder:"ou cole aqui o texto do censo"});
   const go=h("button",{type:"button",class:"btn",id:"censusGo"},"Ler censo");
   const st=h("div",{class:"status",id:"censusSt"});
   const prev=h("div",{id:"censusPrev",class:"stack"});
-  b.append(h("div",{class:"small muted",text:"Envie o censo como PDF (pode ser um por unidade), planilha, foto ou print. Você confere a lista antes de qualquer ficha ser criada."}),
+  b.append(h("div",{class:"small muted",text:"Envie o censo como PDF (pode ser um por unidade) ou planilha. Foto e print não são aceitos. Você confere a lista antes de qualquer ficha ser criada."}),
     fld("Arquivos do censo","censusFile",file),paste,h("div",{class:"row"},go),st,prev);
   card.append(b);
   go.onclick=()=>readCensus(file,paste,st,prev,go);
@@ -2873,7 +2892,7 @@ async function readCensus(file,paste,st,prev,go){
     buildCensusRows([...seen.values()]);
     st.className="status"; st.textContent=seen.size+" pacientes encontrados. Confira e confirme.";
     renderCensusPreview();
-  }catch(e){ st.className="status err"; st.textContent=e&&e.code==="images_unavailable"?"Este aparelho não consegue enviar imagens ao Claude. Use o PDF com texto, a planilha ou cole o texto.":(e&&e.message==="load")?"Não consegui abrir o leitor de PDF/planilha. Cole o texto do censo.":errMsg(e); }
+  }catch(e){ st.className="status err"; st.textContent=e&&e.code==="images_unavailable"?"O site não aceita imagem (foto, print ou PDF escaneado), para economizar. Use o PDF com texto do sistema, a planilha ou cole o texto.":(e&&e.message==="load")?"Não consegui abrir o leitor de PDF/planilha. Cole o texto do censo.":errMsg(e); }
   finally{ go.disabled=false; }
 }
 function buildCensusRows(list){
