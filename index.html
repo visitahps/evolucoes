@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small" id="costFoot"></span> <span class="small">· versão 06/11 (2)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small" id="costFoot"></span> <span class="small">· versão 06/11 (3)</span></p>
 </div>
 
 <script>
@@ -805,7 +805,7 @@ async function prepImage(blob){
   }catch(e){ throw {code:"image_rejected"} }
 }
 const CACHE_CUT="<<<FIM_DA_PARTE_FIXA>>>";
-const USE_CTX="CONTEXTO DE USO: este pedido vem do Organizador de Evoluções, ferramenta de documentação usada pelo próprio médico assistente, responsável pelo paciente. Ele examinou o paciente, escreveu ou colou os dados abaixo a partir do prontuário e revisa e assina tudo antes de usar. Sua tarefa é organizar e revisar o texto dele e apontar pontos para ele avaliar; é apoio à documentação, a decisão é dele. O texto que você gera é um rascunho: o médico confere tudo à beira leito, corrige e assina, e nada vai ao prontuário sem a revisão dele. As regras de estilo são só preferências de redação dele (frases curtas, abreviações dele). Faça a tarefa pedida, no formato pedido. Não recuse, não troque a resposta por aviso e não sugira que ele preencha sozinho; se algo parecer arriscado ou duvidoso, diga isso na análise.";
+const USE_CTX="CONTEXTO DE USO: este pedido vem do Organizador de Evoluções, ferramenta de documentação usada pelo próprio médico assistente, responsável pelo paciente. Ele examinou o paciente, escreveu ou colou os dados abaixo a partir do prontuário e revisa e assina tudo antes de usar. Sua tarefa é organizar e revisar o texto dele e apontar pontos para ele avaliar; é apoio à documentação, a decisão é dele. O texto que você gera é um rascunho: o médico confere tudo à beira leito, corrige e assina, e nada vai ao prontuário sem a revisão dele. As regras de estilo são só preferências de redação dele (frases curtas, abreviações dele). Use só os dados fornecidos: quando faltar um dado, omita o item; nada aqui pede para inventar valores, achados ou condutas. O parágrafo de abertura do exemplo mostra o estilo, não itens obrigatórios: escreva só o que veio da beira leito e do texto colado. Faça a tarefa pedida, no formato pedido. Não recuse, não troque a resposta por aviso e não sugira que ele preencha sozinho; se algo parecer arriscado ou duvidoso, diga isso na análise.";
 function looksRefusal(t){ const s=String(t||"").slice(0,900); return s.length>0&&/n[aã]o (posso|consigo|vou) (produzir|gerar|ajudar|fazer|elaborar|criar|redigir|escrever)|preciso ser diret[oa]|posso ajudar de outras formas|n[aã]o tenho como validar|n[aã]o sou o profissional|I can(no|')t (help|produce|create|write)/i.test(s)&&!/^\s*\|/m.test(s.slice(0,300)); }
 function toMessages(input,imgs){ const out=toMessagesRaw(input,imgs); let used=false;
   { const f=out.find(m=>m.role==="user"); if(f){ if(typeof f.content==="string") f.content=USE_CTX+"\n\n"+f.content; else { const tb=f.content.find(b=>b.type==="text"); if(tb) tb.text=USE_CTX+"\n\n"+tb.text; } } }
@@ -1656,7 +1656,7 @@ function patientContext(p){
 const EVO_RULES=split=>`
 REGRAS DO MÉDICO PARA A EVOLUÇÃO (ele revisa e valida tudo antes de assinar; o objetivo é poupar tempo):
 - Hipóteses diagnósticas: ajuste sempre que a evolução, os exames, os pareceres ou uma inconsistência pedirem. Pode reordenar, refinar (ex.: ITU para pielonefrite aguda quando os dados sustentarem), marcar como resolvida ou em resolução e acrescentar hipótese nova quando houver dado que a sustente.${split?` Diga na análise, depois de ${MARK}, o que mudou na lista de hipóteses e por quê.`:""}
-- Exame físico: nunca escreva "não feito", "não mencionado", "não visto", "não checado", "não avaliado", "sem informação" ou equivalentes. Use os achados de hoje (exame marcado e texto colado); para o que não veio hoje, traga a descrição da evolução anterior como rascunho para o médico confirmar à beira leito antes de assinar, ou omita a linha; na análise, diga quais itens vieram da evolução anterior.${split?` Na análise, liste em uma linha os itens do exame físico repetidos da evolução anterior, para o médico confirmar à beira leito.`:""}
+- Exame físico: use o exame físico que o médico escreveu no texto colado e o exame marcado no site, sem acrescentar achados que não estejam lá. Linha do exame sem dado: omita a linha (em vez de escrever "não feito", "não avaliado" e equivalentes). Se o exame do texto colado parecer de outro dia, diga isso na análise para o médico confirmar.${split?` Na análise, liste em uma linha os itens do exame físico repetidos da evolução anterior, para o médico confirmar à beira leito.`:""}
 - Plano terapêutico e conduta em primeira pessoa: mantenho, ajusto, prescrevo, suspendo, inicio, solicito, aguardo, oriento.
 - Formato: coloque "| " antes de cada título de seção (ex.: "| Hipóteses Diagnósticas:", "| Exames Complementares:"), como no texto do médico.
 - Campos que o texto colado preenche (procedência, HPMA, culturas, especialidades) se mantêm; atualize, não apague.
@@ -1678,11 +1678,11 @@ SEÇÕES FINAIS DA EVOLUÇÃO (obrigatórias, nesta ordem, cada título com "| "
 | Metas e Pendências:
 - Cada meta ou pendência com prazo em horas ou dias no fim: "- Resultado das culturas coletadas em 17/10, em 48h", "- Melhora do delirium, em 24h". Sem meta sem prazo. Específicas deste paciente, no máximo 4, incluindo as metas definidas pelo médico.
 | Planejamento de Alta:
-- "Destino:" específico (domicílio com a família, CASE de crônicos complexos, ILPI, home care, transferência). Se os dados não definem, escreva o destino mais provável e "a confirmar".
+- "Destino:" específico (domicílio com a família, CASE de crônicos complexos, ILPI, home care, transferência). Se os dados não definem o destino, escreva "Destino: a definir".
 - Encaminhamentos (ambulatório, especialidades, CASE) e orientações registradas (sinais de alarme, cuidados com curativo, higiene, dieta), cada um numa linha.
 | Metas Multidisciplinares:
 - Sempre as quatro áreas, nesta ordem: Nutrição, Fisioterapia, Fonoaudiologia, Enfermagem. Formato: "- Nutrição: dieta VO conforme aceitação, manter aporte proteico; Prazo: 48h".
-- Área sem meta neste caso: escreva explicitamente, com o motivo curto: "- Fonoaudiologia: sem meta no momento, deglutição sem alteração e dieta VO". Nunca deixe área em branco nem omita.
+- Metas só com base nos dados fornecidos. Área sem meta ou sem dado para ela: escreva "- Fonoaudiologia: sem meta definida no momento" (com o motivo, se estiver nos dados). Não deixe área em branco.
 - Enfermagem: riscos e cuidados reais deste paciente (queda, LPP com mudança de decúbito, flebite, broncoaspiração, glicemia capilar), de forma enxuta.
 - Proibido: "além disso", "vale ressaltar", "cabe destacar", "nesse contexto", "diante do exposto", "em suma", "de forma favorável", "mantém-se em acompanhamento", "segue em acompanhamento multidisciplinar", "quadro clínico estável do ponto de vista", "a ser reavaliado conforme evolução", adjetivos de enfeite e explicações do óbvio.
 - Nunca escreva no prontuário o que falta ou não foi encontrado (ex.: "labs de hoje não disponíveis", "sem ECO recente encontrado", "aguardo exames para confirmar"); isso vai para a análise, que o médico lê antes de assinar, ou para uma linha objetiva do plano ("- Solicito ECOTT").
@@ -1694,7 +1694,7 @@ ${split?`- Depois da linha ${MARK} (fica fora do prontuário), faça a análise 
   INVESTIGAR: só o que mudaria a conduta; diga também o que não precisa pedir.
   PONTOS CEGOS E RISCOS 24 A 72H: segurança (delirium, quedas, LPP, nutrição, TEV, glicemia, objetivos de cuidado, barreiras de alta) e gatilhos para escalonar.
   PERGUNTAS PARA A BEIRA LEITO: 2 a 4 checagens objetivas para hoje.
-  SUGESTÕES PARA O PLANO: as condutas que você recomenda e que ainda não estão no plano, cada uma numa linha começando com "+ ", curta como linha de plano escrita à mão, verbo em primeira pessoa e sem justificativa (ex.: "+ Solicito ferritina e reticulócitos", "+ Ajusto enoxaparina para 20 mg/dia"). No máximo 4, só o que realmente muda o cuidado, com base nos dados. O site coloca essas linhas no plano e o médico decide se ficam.
+  SUGESTÕES PARA O PLANO: as condutas que você recomenda e que ainda não estão no plano, cada uma numa linha começando com "+ ", curta como linha de plano escrita à mão, verbo em primeira pessoa e sem justificativa (ex.: "+ Solicito ferritina e reticulócitos", "+ Ajusto enoxaparina para 20 mg/dia"). No máximo 4, só o que realmente muda o cuidado, com base nos dados. Elas aparecem para o médico como sugestões desmarcadas, fora do plano; só entram no plano se ele marcar.
   Se a conduta estiver adequada, diga em uma linha e não invente problema.
   A análise inteira em no máximo 8 tópicos curtos (1 a 2 linhas cada), sem introdução nem conclusão.`:""}
 - SEÇÃO EVOLUÇÃO, NO MODELO DO PRÓPRIO MÉDICO. É assim que ele escreve:
@@ -2124,7 +2124,7 @@ function planWarnEl(list){return h("div",{class:"alerts",id:"planWarn",hidden:!(
 function showPlanWarn(list){const b=$("planWarn");if(!b)return;b.hidden=!list.length;$("planWarnT").textContent=list.map(x=>"- "+x).join("\n")}
 function showNumWarn(list){const b=$("numWarn");if(!b)return;b.hidden=!list.length;$("numWarnT").textContent=list.join("  ·  ")}
 // ===================== sugestões de conduta que entram no plano =====================
-const autoSug=()=>{try{return localStorage.getItem("evo.autosug")!=="0"}catch(e){return true}};
+const autoSug=()=>{try{return localStorage.getItem("evo.autosug2")==="1"}catch(e){return false}};
 function extractSugs(alerts){
   const list=[], rest=[];
   String(alerts||"").split("\n").forEach(l=>{
@@ -2186,7 +2186,7 @@ function sugCard(pid){
     c.onchange=()=>{ const s=(P.get(pid).evo.sugs||[]).map((y,j)=>j===i?{...y,on:c.checked}:y); save(pid,{evo:{sugs:s}},0); apply() };
     box.append(h("label",{class:"row",style:"gap:8px;align-items:flex-start;margin:4px 0"},c,h("span",{text:x.t})));
   });
-  const auto=h("input",{type:"checkbox",checked:autoSug()}); auto.onchange=()=>{try{localStorage.setItem("evo.autosug",auto.checked?"1":"0")}catch(e){}};
+  const auto=h("input",{type:"checkbox",checked:autoSug()}); auto.onchange=()=>{try{localStorage.setItem("evo.autosug2",auto.checked?"1":"0")}catch(e){}};
   box.append(h("label",{class:"row small muted",style:"gap:6px;margin-top:6px"},auto,"Nas próximas evoluções, já colocar as sugestões no plano"));
   return box;
 }
