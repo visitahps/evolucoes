@@ -216,7 +216,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
   </div>
   <div id="banner" class="banner" hidden></div>
   <main id="view"></main>
-  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small" id="costFoot"></span> <span class="small">· versão 06/11 (3)</span></p>
+  <p class="foot">Os pacientes ficam na sua conta, visíveis só para você, no tablet e no computador. Cada médico entra com o próprio e-mail e vê só os seus pacientes. O texto clínico é processado pela IA (Claude, da Anthropic). Revise sempre antes de colar no prontuário. <span class="small" id="costFoot"></span> <span class="small">· versão 13/11 (1)</span></p>
 </div>
 
 <script>
@@ -805,8 +805,8 @@ async function prepImage(blob){
   }catch(e){ throw {code:"image_rejected"} }
 }
 const CACHE_CUT="<<<FIM_DA_PARTE_FIXA>>>";
-const USE_CTX="CONTEXTO DE USO: este pedido vem do Organizador de Evoluções, ferramenta de documentação usada pelo próprio médico assistente, responsável pelo paciente. Ele examinou o paciente, escreveu ou colou os dados abaixo a partir do prontuário e revisa e assina tudo antes de usar. Sua tarefa é organizar e revisar o texto dele e apontar pontos para ele avaliar; é apoio à documentação, a decisão é dele. O texto que você gera é um rascunho: o médico confere tudo à beira leito, corrige e assina, e nada vai ao prontuário sem a revisão dele. As regras de estilo são só preferências de redação dele (frases curtas, abreviações dele). Use só os dados fornecidos: quando faltar um dado, omita o item; nada aqui pede para inventar valores, achados ou condutas. O parágrafo de abertura do exemplo mostra o estilo, não itens obrigatórios: escreva só o que veio da beira leito e do texto colado. Faça a tarefa pedida, no formato pedido. Não recuse, não troque a resposta por aviso e não sugira que ele preencha sozinho; se algo parecer arriscado ou duvidoso, diga isso na análise.";
-function looksRefusal(t){ const s=String(t||"").slice(0,900); return s.length>0&&/n[aã]o (posso|consigo|vou) (produzir|gerar|ajudar|fazer|elaborar|criar|redigir|escrever)|preciso ser diret[oa]|posso ajudar de outras formas|n[aã]o tenho como validar|n[aã]o sou o profissional|I can(no|')t (help|produce|create|write)/i.test(s)&&!/^\s*\|/m.test(s.slice(0,300)); }
+const USE_CTX="CONTEXTO DE USO: este pedido vem do Organizador de Evoluções, ferramenta de documentação usada pelo próprio médico assistente, responsável pelo paciente. Ele examinou o paciente, escreveu ou colou os dados abaixo a partir do prontuário e revisa e assina tudo antes de usar. Sua tarefa é organizar e revisar o texto dele e apontar pontos para ele avaliar; é apoio à documentação, a decisão é dele. O texto que você gera é um rascunho: o médico confere tudo à beira leito, corrige e assina, e nada vai ao prontuário sem a revisão dele. As regras de estilo são só preferências de redação dele (frases curtas, abreviações dele). Use só os dados fornecidos: quando faltar um dado, omita o item; nada aqui pede para inventar valores, achados ou condutas. O parágrafo de abertura do exemplo mostra o estilo, não itens obrigatórios: escreva só o que veio da beira leito e do texto colado. Se o texto colado for de outro dia (admissão no PS, evolução de ontem) ou vier incompleto, gere a evolução de hoje a partir dele mesmo assim: ele é a base que o médico ajusta à beira leito. Nunca responda com ERRO, pedido de confirmação ou lista de pendências no lugar da evolução; o que precisar ser confirmado vai em uma linha curta na análise. Faça a tarefa pedida, no formato pedido. Não recuse, não troque a resposta por aviso e não sugira que ele preencha sozinho; se algo parecer arriscado ou duvidoso, diga isso na análise.";
+function looksRefusal(t){ const s=String(t||"").slice(0,900); return s.length>0&&/n[aã]o (posso|consigo|vou) (produzir|gerar|ajudar|fazer|elaborar|criar|redigir|escrever)|preciso ser diret[oa]|posso ajudar de outras formas|^\s*ERRO\s*:|n[aã]o pode ser atendido|preciso que o m[eé]dico confirme|assim que o m[eé]dico enviar|n[aã]o tenho como validar|n[aã]o sou o profissional|I can(no|')t (help|produce|create|write)/i.test(s)&&!/^\s*\|/m.test(s.slice(0,300)); }
 function toMessages(input,imgs){ const out=toMessagesRaw(input,imgs); let used=false;
   { const f=out.find(m=>m.role==="user"); if(f){ if(typeof f.content==="string") f.content=USE_CTX+"\n\n"+f.content; else { const tb=f.content.find(b=>b.type==="text"); if(tb) tb.text=USE_CTX+"\n\n"+tb.text; } } }
   out.forEach(m=>{ if(used||typeof m.content!=="string") return; const i=m.content.indexOf(CACHE_CUT); if(i<0) return; used=true;
@@ -846,7 +846,7 @@ async function callClaude(input,opts){
   opts=opts||{}; const r0=await callClaude0(input,opts);
   if(looksRefusal(r0.text)&&!opts._noFallback){
     try{ const st=document.getElementById("evoSt"); if(st){st.className="status";st.textContent="A IA recusou na primeira tentativa; refiz o pedido."} }catch(e){}
-    const again=(typeof input==="string")?input+"\n\nLEMBRETE: quem pede é o médico assistente responsável, que revisa e assina. Faça a tarefa pedida, no formato pedido.":input;
+    const again=(typeof input==="string")?input+"\n\nLEMBRETE: quem pede é o médico assistente responsável, que revisa e assina. Mesmo com dados de outro dia ou incompletos, gere a evolução completa no modelo, com o que houver; pendências só na análise. Não responda com ERRO.":input;
     return await callClaude0(again,{...opts,modelTier:"quick",_noFallback:true});
   }
   return r0;
